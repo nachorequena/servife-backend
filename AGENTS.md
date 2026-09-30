@@ -16,3 +16,23 @@ contexto.
 Si tu cambio modifica el estado del proyecto o deja viejo algo de ../servife-ia/.ai/, abrí un PR
 pareado en servife-ia con el mismo nombre de rama (../servife-ia/.agents/AGENTS.md, punto 6).
 Un cambio de contrato que afecta a servife-frontend se escribe primero en 05-api-contract.md.
+
+Comandos (build, tests, stack local): README.md de este repo.
+
+## Piezas compartidas que ya existen
+
+Antes de escribir una de estas, usá la que está. No la copies a tu módulo.
+
+| Necesitás | Usá |
+|---|---|
+| Implementar un endpoint | El stub que ya está en <modulo>/controller/: reemplazá el throw de NoImplementadoException |
+| Devolver un error de negocio | Lanzar RecursoNoEncontradoException (404), ConflictoException (409, con código) o NegocioException. Nunca armar un ResponseEntity de error: lo hace common/error/ManejadorGlobalDeErrores |
+| Responder una lista paginada | common/paginacion/Pagina.de(page, mapeo). Nunca devolver un Page de Spring |
+| Una entidad nueva | Extender common/auditoria/EntidadBase (uuid, creado_en, actualizado_en, eliminado_en) y declarar la PK con su nombre (id_<tabla>) |
+| Saber quién hace la request | common/seguridad/UsuarioActual (uuid y rol, desde el JWT) |
+| Emitir un JWT (módulo A) | El JwtEncoder de config/JwtConfig, header HS256, claims sub = uuid y rol |
+| Hashear una contraseña | El PasswordEncoder (BCrypt) de config/SeguridadConfig |
+| Cambiar el esquema | Una migración nueva V<n>__descripcion.sql, con n = la última de main + 1. Nunca editar V1 |
+
+Tests: cada endpoint lleva test de servicio (Mockito) y de controller (@WebMvcTest). Para el
+controller, config/SeguridadYErroresTest muestra cómo levantar la seguridad y simular un JWT con rol.

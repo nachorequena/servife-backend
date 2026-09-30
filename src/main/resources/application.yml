@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: servife
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/servife}
+    username: ${DB_USER:servife}
+    password: ${DB_PASSWORD:servife}
+  jpa:
+    # El esquema lo maneja Flyway. Nunca update (.ai/04-database-schema.md).
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    time-zone: UTC
+  # TODO: tamaño máximo de archivo sin definir (.ai/07-security.md). Hasta entonces, el default de Spring.
+  # servlet:
+  #   multipart:
+  #     max-file-size:
+
+server:
+  servlet:
+    context-path: /api/v1
+
+servife:
+  jwt:
+    # Mínimo 32 caracteres (HS256). Nunca commitear el valor real.
+    secreto: ${JWT_SECRETO}
+    duracion-access: 15m
+    duracion-refresh: 7d
+  cors:
+    origenes-permitidos: ${CORS_ORIGENES:http://localhost:8081}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
