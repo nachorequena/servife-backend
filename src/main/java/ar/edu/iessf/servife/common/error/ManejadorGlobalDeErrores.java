@@ -42,6 +42,15 @@ public class ManejadorGlobalDeErrores {
         return ResponseEntity.badRequest().body(cuerpo);
     }
 
+    /** Regla de validación que depende de la base u otro campo: mismo formato que Bean Validation. */
+    @ExceptionHandler(ValidacionException.class)
+    public ResponseEntity<ErrorRespuesta> validacionDeNegocio(ValidacionException e, HttpServletRequest request) {
+        ErrorRespuesta cuerpo = ErrorRespuesta.de(HttpStatus.BAD_REQUEST.value(), "VALIDACION",
+            "Hay campos con errores.", request.getRequestURI(),
+            List.of(new ErrorCampo(e.getCampo(), e.getDetalle())));
+        return ResponseEntity.badRequest().body(cuerpo);
+    }
+
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ErrorRespuesta> cuerpoInvalido(Exception e, HttpServletRequest request) {
         return responder(HttpStatus.BAD_REQUEST, "SOLICITUD_INVALIDA", "La solicitud no tiene el formato esperado.", request);

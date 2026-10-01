@@ -22,6 +22,7 @@ import ar.edu.iessf.servife.catalogo.service.TipoServicioService;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.gestion.controller.AdminUsuarioController;
 import ar.edu.iessf.servife.identidad.controller.AuthController;
+import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
 
 /**
  * Base transversal: autenticación, roles y formato único de error (.ai/05, .ai/07).
@@ -45,6 +46,9 @@ class SeguridadYErroresTest {
 
     @MockitoBean
     private TipoServicioService tipoServicioService;
+
+    @MockitoBean
+    private ServicioDeRegistro servicioDeRegistro;
 
     private static JwtRequestPostProcessor como(String rol) {
         return jwt()
