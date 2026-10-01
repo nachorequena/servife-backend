@@ -36,6 +36,15 @@ class MigracionesTest {
         assertThat(tablas).contains(
             "clientes", "prestadores", "gestores", "tipos_servicio", "disponibilidad_prestador",
             "solicitudes_servicio", "solicitud_imagenes", "valoraciones", "publicaciones",
-            "publicacion_imagenes", "archivos", "documentos_validacion", "dispositivos", "notificaciones");
+            "publicacion_imagenes", "archivos", "documentos_validacion", "dispositivos", "notificaciones",
+            "refresh_tokens", "codigos_recuperacion");
+    }
+
+    @Test
+    void cargaLosSieteRubrosIniciales() {
+        Integer total = jdbc.queryForObject("SELECT count(*) FROM tipos_servicio WHERE eliminado_en IS NULL", Integer.class);
+        Boolean gas = jdbc.queryForObject("SELECT requiere_matricula FROM tipos_servicio WHERE nombre = 'Gas'", Boolean.class);
+        assertThat(total).isEqualTo(7);
+        assertThat(gas).isTrue();
     }
 }
