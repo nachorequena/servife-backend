@@ -15,4 +15,9 @@ public record RegistroRequest(
     @NotBlank @Email @Size(max = 254) String email,
     @NotBlank @Pattern(regexp = Contrasenias.REGLA, message = Contrasenias.MENSAJE) String contrasenia,
     UUID idTipoServicio) {
+
+    /** Recorta el email antes de validar: " Ana@Mail.com " es la misma cuenta que "Ana@Mail.com". */
+    public RegistroRequest {
+        email = email == null ? null : email.strip();
+    }
 }

@@ -1,5 +1,6 @@
 package ar.edu.iessf.servife.identidad.service;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,7 @@ public class ServicioDeRegistro {
         }
         boolean esPrestador = ROL_PRESTADOR.equals(pedido.rol());
         TipoServicio tipo = esPrestador ? buscarTipo(pedido) : null;
+        Contrasenias.validarLargo("contrasenia", pedido.contrasenia());
         String hash = passwordEncoder.encode(pedido.contrasenia());
         try {
             Cuenta guardada = esPrestador
@@ -57,9 +59,23 @@ public class ServicioDeRegistro {
                 : clientes.saveAndFlush(new Cliente(pedido.nombreApellido(), email, hash));
             return mapper.aRespuesta(guardada);
         } catch (DataIntegrityViolationException e) {
-            // Dos registros simultáneos con el mismo email: gana el primero, la base garantiza el UNIQUE.
-            throw emailYaRegistrado();
+            // Dos registros simultáneos con el mismo email: gana el primero. Cualquier otra violación es un bug.
+            if (esViolacionDeEmail(e)) {
+                throw emailYaRegistrado();
+            }
+            throw e;
         }
+    }
+
+    /** Si la violación es del UNIQUE de email (clientes_email_key, prestadores_email_key, gestores_email_key). */
+    public static boolean esViolacionDeEmail(Throwable error) {
+        for (Throwable causa = error; causa != null; causa = causa.getCause()) {
+            if (causa instanceof ConstraintViolationException v && v.getConstraintName() != null
+                    && v.getConstraintName().endsWith("_email_key")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private TipoServicio buscarTipo(RegistroRequest pedido) {

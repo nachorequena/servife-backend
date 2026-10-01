@@ -8,9 +8,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -126,15 +128,46 @@ class ServicioDeRegistroTest {
     }
 
     @Test
-    void siDosRegistrosSeCruzanLaRestriccionUnicaDa409EnVezDe500() {
+    void siDosRegistrosSeCruzanElUniqueDeEmailDa409EnVezDe500() {
         when(cuentas.emailRegistrado("ana@mail.com")).thenReturn(false);
         when(passwordEncoder.encode(CLAVE)).thenReturn(HASH);
-        when(clientes.saveAndFlush(any(Cliente.class))).thenThrow(new DataIntegrityViolationException("uq"));
+        when(clientes.saveAndFlush(any(Cliente.class))).thenThrow(violacion("clientes_email_key"));
 
         assertThatThrownBy(() -> servicio.registrar(
             new RegistroRequest("CLIENTE", "Ana", "ana@mail.com", CLAVE, null)))
             .isInstanceOfSatisfying(ConflictoException.class,
                 e -> assertThat(e.getCodigo()).isEqualTo("EMAIL_YA_REGISTRADO"));
+    }
+
+    @Test
+    void otraViolacionDeIntegridadSeRelanzaTalCual() {
+        when(cuentas.emailRegistrado("ana@mail.com")).thenReturn(false);
+        when(passwordEncoder.encode(CLAVE)).thenReturn(HASH);
+        DataIntegrityViolationException otra = violacion("clientes_uuid_key");
+        when(clientes.saveAndFlush(any(Cliente.class))).thenThrow(otra);
+
+        assertThatThrownBy(() -> servicio.registrar(
+            new RegistroRequest("CLIENTE", "Ana", "ana@mail.com", CLAVE, null)))
+            .isSameAs(otra);
+    }
+
+    @Test
+    void contraseniaDeMasDe72BytesDaValidacionAunqueTenga70Caracteres() {
+        String larga = "a1" + "ñ".repeat(68); // 70 caracteres, 138 bytes en UTF-8
+        when(cuentas.emailRegistrado("ana@mail.com")).thenReturn(false);
+
+        assertThatThrownBy(() -> servicio.registrar(
+            new RegistroRequest("CLIENTE", "Ana", "ana@mail.com", larga, null)))
+            .isInstanceOfSatisfying(ValidacionException.class, e -> {
+                assertThat(e.getCampo()).isEqualTo("contrasenia");
+                assertThat(e.getDetalle()).isEqualTo("es demasiado larga");
+            });
+        verify(passwordEncoder, never()).encode(any());
+    }
+
+    private static DataIntegrityViolationException violacion(String constraint) {
+        return new DataIntegrityViolationException("violación",
+            new ConstraintViolationException("violación", new SQLException("x"), constraint));
     }
 
     @Test

@@ -1,11 +1,14 @@
 package ar.edu.iessf.servife.identidad;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -25,6 +28,7 @@ import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
 import ar.edu.iessf.servife.identidad.repository.GestorRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 import ar.edu.iessf.servife.identidad.service.Cuentas;
+import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
 
 /**
  * Entidades de usuario y búsqueda de cuentas contra PostgreSQL real: Hibernate valida el
@@ -131,5 +135,18 @@ class CuentasTest {
     void listaLosTiposDeServicioOrdenadosPorNombre() {
         assertThat(tiposServicio.findByEliminadoEnIsNullOrderByNombre())
             .extracting(TipoServicio::getNombre).hasSize(7).isSorted();
+    }
+
+    @Test
+    void elUniqueDeEmailTieneElNombreQueElServicioReconoce() {
+        guardarAna();
+
+        Throwable e = catchThrowable(
+            () -> clientes.saveAndFlush(new Cliente("Otra Ana", "ana@mail.com", "hash")));
+
+        assertThat(e).isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(ServicioDeRegistro.esViolacionDeEmail(e)).isTrue();
+        assertThat(e.getCause()).isInstanceOf(ConstraintViolationException.class);
+        assertThat(((ConstraintViolationException) e.getCause()).getConstraintName()).endsWith("_email_key");
     }
 }

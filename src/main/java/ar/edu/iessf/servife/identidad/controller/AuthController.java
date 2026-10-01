@@ -18,8 +18,8 @@ import jakarta.validation.Valid;
 /**
  * Módulo A — Identidad y cuentas (dueño: Pedro Soria).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * Cada método es un stub que responde 501 hasta que se implemente: definí los DTOs en dto/,
- * la lógica en service/ y reemplazá el throw.
+ * A1 (registro) está implementado; los demás endpoints son stubs que responden 501 hasta que se
+ * implementen: definí los DTOs en dto/, la lógica en service/ y reemplazá el throw.
  */
 @RestController
 @RequestMapping("/auth")

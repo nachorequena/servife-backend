@@ -1,5 +1,6 @@
 package ar.edu.iessf.servife.identidad;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -77,6 +79,21 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.email").value("ana@mail.com"))
             .andExpect(jsonPath("$.contrasenia").doesNotExist())
             .andExpect(jsonPath("$.id").doesNotExist());
+    }
+
+    @Test
+    void emailConEspaciosSeRecortaAntesDeValidarYLlegaRecortadoAlServicio() throws Exception {
+        when(registro.registrar(any(RegistroRequest.class))).thenReturn(
+            new UsuarioResponse(UUID.randomUUID(), Rol.CLIENTE, "Ana Pérez", "ana@mail.com", null, null, null, null));
+
+        registrar("""
+            {"rol":"CLIENTE","nombreApellido":"Ana Pérez","email":" Ana@Mail.com ","contrasenia":"clave1234"}
+            """)
+            .andExpect(status().isCreated());
+
+        ArgumentCaptor<RegistroRequest> recibido = ArgumentCaptor.forClass(RegistroRequest.class);
+        verify(registro).registrar(recibido.capture());
+        assertThat(recibido.getValue().email()).isEqualTo("Ana@Mail.com");
     }
 
     @Test
