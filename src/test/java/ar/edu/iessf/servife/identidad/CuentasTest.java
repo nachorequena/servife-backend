@@ -33,7 +33,7 @@ import ar.edu.iessf.servife.identidad.service.Cuentas;
 @SpringBootTest(properties = "servife.jwt.secreto=secreto-de-prueba-de-al-menos-32-caracteres")
 @Testcontainers(disabledWithoutDocker = true)
 @Transactional
-class CuentasIT {
+class CuentasTest {
 
     @Container
     @ServiceConnection
