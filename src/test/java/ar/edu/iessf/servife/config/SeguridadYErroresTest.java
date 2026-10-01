@@ -13,9 +13,12 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import ar.edu.iessf.servife.catalogo.controller.PrestadorController;
 import ar.edu.iessf.servife.catalogo.controller.TipoServicioController;
+import ar.edu.iessf.servife.catalogo.service.TipoServicioService;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.gestion.controller.AdminUsuarioController;
 import ar.edu.iessf.servife.identidad.controller.AuthController;
@@ -24,7 +27,8 @@ import ar.edu.iessf.servife.identidad.controller.AuthController;
  * Base transversal: autenticación, roles y formato único de error (.ai/05, .ai/07).
  * No prueba lógica de ningún módulo: cada dueño escribe los tests de sus endpoints.
  */
-@WebMvcTest(controllers = {TipoServicioController.class, AdminUsuarioController.class, AuthController.class})
+@WebMvcTest(controllers = {TipoServicioController.class, PrestadorController.class, AdminUsuarioController.class,
+    AuthController.class})
 @Import({SeguridadConfig.class, JwtConfig.class, CorsConfig.class, EscritorDeErrores.class})
 @TestPropertySource(properties = {
     "servife.jwt.secreto=secreto-de-prueba-de-al-menos-32-caracteres",
@@ -39,6 +43,9 @@ class SeguridadYErroresTest {
     @Autowired
     private MockMvc mvc;
 
+    @MockitoBean
+    private TipoServicioService tipoServicioService;
+
     private static JwtRequestPostProcessor como(String rol) {
         return jwt()
             .jwt(j -> j.subject("7f1c2d4e-0000-4000-8000-000000000001").claim(JwtConfig.CLAIM_ROL, rol))
@@ -47,11 +54,11 @@ class SeguridadYErroresTest {
 
     @Test
     void sinTokenDevuelve401ConElFormatoDeError() throws Exception {
-        mvc.perform(get(CONTEXTO + "/tipos-servicio").contextPath(CONTEXTO))
+        mvc.perform(get(CONTEXTO + "/prestadores").contextPath(CONTEXTO))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.status").value(401))
             .andExpect(jsonPath("$.codigo").value("NO_AUTENTICADO"))
-            .andExpect(jsonPath("$.path").value("/api/v1/tipos-servicio"))
+            .andExpect(jsonPath("$.path").value("/api/v1/prestadores"))
             .andExpect(jsonPath("$.errores").isArray());
     }
 
@@ -71,7 +78,7 @@ class SeguridadYErroresTest {
 
     @Test
     void endpointSinImplementarDevuelve501() throws Exception {
-        mvc.perform(get(CONTEXTO + "/tipos-servicio").contextPath(CONTEXTO).with(como("CLIENTE")))
+        mvc.perform(get(CONTEXTO + "/prestadores").contextPath(CONTEXTO).with(como("CLIENTE")))
             .andExpect(status().isNotImplemented())
             .andExpect(jsonPath("$.codigo").value("NO_IMPLEMENTADO"));
     }

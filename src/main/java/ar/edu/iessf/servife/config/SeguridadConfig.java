@@ -42,6 +42,7 @@ public class SeguridadConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, PUBLICOS).permitAll()
+                .requestMatchers(HttpMethod.GET, "/tipos-servicio").permitAll()
                 .requestMatchers(DOCUMENTACION).permitAll()
                 .requestMatchers("/admin/**").hasRole("GESTOR")
                 .anyRequest().authenticated())
