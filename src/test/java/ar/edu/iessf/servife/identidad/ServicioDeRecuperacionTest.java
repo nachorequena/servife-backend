@@ -3,6 +3,9 @@ package ar.edu.iessf.servife.identidad;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -24,6 +27,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -76,9 +80,12 @@ class ServicioDeRecuperacionTest {
     @MockitoBean private EnviadorDeCorreos correos;
     @MockitoBean private ServicioDeTokens tokens;
 
+    private int enviosEsperados;
+
     @BeforeEach
     void preparar() {
         limpiar();
+        enviosEsperados = 0;
     }
 
     @AfterEach
@@ -91,11 +98,11 @@ class ServicioDeRecuperacionTest {
         return clientes.saveAndFlush(new Cliente("Ana Pérez", "ana@mail.com", passwordEncoder.encode(CLAVE)));
     }
 
-    /** Pide el código y lo lee del correo enviado (la última vez que se llamó a enviar). */
+    /** Pide el código y lo lee del correo, que se envía asíncrono y después del commit. */
     private String pedirCodigo() {
         ArgumentCaptor<String> texto = ArgumentCaptor.forClass(String.class);
         servicio.solicitar(new RecuperarRequest("ana@mail.com"));
-        verify(correos, org.mockito.Mockito.atLeastOnce()).enviar(anyString(), anyString(), texto.capture());
+        verify(correos, timeout(5000).times(++enviosEsperados)).enviar(anyString(), anyString(), texto.capture());
         List<String> textos = texto.getAllValues();
         Matcher m = SEIS_DIGITOS.matcher(textos.get(textos.size() - 1));
         assertThat(m.find()).isTrue();
@@ -125,8 +132,8 @@ class ServicioDeRecuperacionTest {
         servicio.solicitar(new RecuperarRequest(" Ana@Mail.com "));
 
         ArgumentCaptor<String> texto = ArgumentCaptor.forClass(String.class);
-        verify(correos, times(1)).enviar(org.mockito.ArgumentMatchers.eq("ana@mail.com"),
-            org.mockito.ArgumentMatchers.eq("Tu código de ServiFe"), texto.capture());
+        verify(correos, timeout(5000).times(1)).enviar(eq("ana@mail.com"),
+            eq("Tu código de ServiFe"), texto.capture());
         Matcher m = SEIS_DIGITOS.matcher(texto.getValue());
         assertThat(m.find()).isTrue();
         String codigo = m.group(1);
@@ -164,15 +171,12 @@ class ServicioDeRecuperacionTest {
         guardarAna();
         String primero = pedirCodigo();
         String segundo = pedirCodigo();
-        // Con 1 en 1.000.000 de probabilidad coinciden; el hash igual no serviría porque el primero quedó usado.
-
         List<CodigoRecuperacion> guardados = codigos.findAll();
         assertThat(guardados).hasSize(2);
-        assertThat(guardados.stream().filter(c -> c.getUsadoEn() == null)).hasSize(1);
+        assertThat(guardados.get(0).getUsadoEn()).isNotNull();
+        assertThat(guardados.get(1).getUsadoEn()).isNull();
 
-        if (!primero.equals(segundo)) {
-            assertThatThrownBy(() -> confirmar(primero)).satisfies(ServicioDeRecuperacionTest::esCodigoInvalido);
-        }
+        // Con 1 en 1.000.000 coinciden los códigos; el primero igual quedó usado (assert de arriba).
         confirmar(segundo);
         assertThat(contraseniaEsLaNueva()).isTrue();
     }
@@ -270,5 +274,46 @@ class ServicioDeRecuperacionTest {
             new ConfirmarRecuperacionRequest("ana@mail.com", codigo, "ñ".repeat(40) + "1")))
             .isInstanceOfSatisfying(ValidacionException.class,
                 e -> assertThat(e.getCampo()).isEqualTo("contraseniaNueva"));
+    }
+
+    @Test
+    void siElEnvioFallaSolicitarNoLanzaNiRevelaNadaYElCodigoQuedaGuardado() {
+        guardarAna();
+        doThrow(new IllegalStateException("SMTP caído")).when(correos).enviar(anyString(), anyString(), anyString());
+
+        servicio.solicitar(new RecuperarRequest("ana@mail.com"));
+
+        verify(correos, timeout(5000)).enviar(anyString(), anyString(), anyString());
+        assertThat(codigos.findAll()).hasSize(1);
+    }
+
+    /** Inserta un código directo (sin pasar por solicitar, que enviaría el correo recién al commit). */
+    private Long guardarCodigoVigente() {
+        return codigos.saveAndFlush(new CodigoRecuperacion("ana@mail.com", Hashes.sha256Hex("123456"),
+            reloj.instant(), reloj.instant().plus(Duration.ofMinutes(15)))).getId();
+    }
+
+    @Test
+    @Transactional
+    void elTopeDeCincoIntentosEsAtomicoYNoSePasaAunqueSeInsista() {
+        Long id = guardarCodigoVigente();
+
+        int sumados = 0;
+        for (int i = 0; i < 8; i++) {
+            sumados += codigos.sumarIntentoSiVigente(id, reloj.instant());
+        }
+
+        assertThat(sumados).isEqualTo(5);
+        assertThat(codigos.findAll().get(0).getIntentos()).isEqualTo(5);
+        assertThat(codigos.usarSiVigente(id, reloj.instant())).isZero();
+    }
+
+    @Test
+    @Transactional
+    void usarSiVigenteSoloLoLograUnPedido() {
+        Long id = guardarCodigoVigente();
+
+        assertThat(codigos.usarSiVigente(id, reloj.instant())).isEqualTo(1);
+        assertThat(codigos.usarSiVigente(id, reloj.instant())).isZero();
     }
 }

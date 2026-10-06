@@ -20,7 +20,7 @@ import jakarta.persistence.Table;
 @Table(name = "codigos_recuperacion")
 public class CodigoRecuperacion {
 
-    /** Con este número de intentos fallidos el código deja de servir. */
+    /** Con este número de intentos fallidos el código deja de servir (el repositorio repite el 5 en sus consultas). */
     public static final int MAX_INTENTOS = 5;
 
     @Id
@@ -62,12 +62,8 @@ public class CodigoRecuperacion {
         return usadoEn == null && intentos < MAX_INTENTOS && ahora.isBefore(expiraEn);
     }
 
-    public void registrarIntentoFallido() {
-        intentos++;
-    }
-
-    public void marcarUsado(Instant ahora) {
-        usadoEn = ahora;
+    public Long getId() {
+        return id;
     }
 
     public String getEmail() {
