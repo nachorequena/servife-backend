@@ -17,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -25,15 +26,20 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import ar.edu.iessf.servife.common.error.ConflictoException;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
+import ar.edu.iessf.servife.common.error.NegocioException;
 import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.common.seguridad.Rol;
 import ar.edu.iessf.servife.config.CorsConfig;
 import ar.edu.iessf.servife.config.JwtConfig;
 import ar.edu.iessf.servife.config.SeguridadConfig;
 import ar.edu.iessf.servife.identidad.controller.AuthController;
+import ar.edu.iessf.servife.identidad.dto.LoginRequest;
+import ar.edu.iessf.servife.identidad.dto.RefreshRequest;
 import ar.edu.iessf.servife.identidad.dto.RegistroRequest;
+import ar.edu.iessf.servife.identidad.dto.TokensResponse;
 import ar.edu.iessf.servife.identidad.dto.UsuarioResponse;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
+import ar.edu.iessf.servife.identidad.service.ServicioDeSesion;
 
 /** Endpoints de /auth (crece en las Tasks 7 a 9). */
 @WebMvcTest(controllers = AuthController.class)
@@ -53,6 +59,9 @@ class AuthControllerTest {
 
     @MockitoBean
     private ServicioDeRegistro registro;
+
+    @MockitoBean
+    private ServicioDeSesion sesion;
 
     private ResultActions registrar(String json) throws Exception {
         return mvc.perform(post(CONTEXTO + "/auth/registro").contextPath(CONTEXTO)
@@ -145,5 +154,126 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.mensaje").value("Hay campos con errores."))
             .andExpect(jsonPath("$.errores[0].campo").value("idTipoServicio"))
             .andExpect(jsonPath("$.errores[0].detalle").value("es obligatorio para prestadores"));
+    }
+
+    private ResultActions enviar(String ruta, String json) throws Exception {
+        return mvc.perform(post(CONTEXTO + ruta).contextPath(CONTEXTO)
+            .contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    // --- A2 login ---
+
+    @Test
+    void loginConCuerpoValidoDa200ConTokensYRolSinAutenticacion() throws Exception {
+        when(sesion.iniciar(any(LoginRequest.class)))
+            .thenReturn(new TokensResponse("el-access", "el-refresh", Rol.PRESTADOR));
+
+        enviar("/auth/login", """
+            {"email":"ana@mail.com","contrasenia":"clave1234"}
+            """)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").value("el-access"))
+            .andExpect(jsonPath("$.refreshToken").value("el-refresh"))
+            .andExpect(jsonPath("$.rol").value("PRESTADOR"));
+    }
+
+    @Test
+    void loginConEmailConMayusculasYEspaciosLlegaRecortadoAlServicio() throws Exception {
+        when(sesion.iniciar(any(LoginRequest.class))).thenReturn(new TokensResponse("a", "r", Rol.CLIENTE));
+
+        enviar("/auth/login", """
+            {"email":" Ana@Mail.com ","contrasenia":"clave1234"}
+            """)
+            .andExpect(status().isOk());
+
+        ArgumentCaptor<LoginRequest> recibido = ArgumentCaptor.forClass(LoginRequest.class);
+        verify(sesion).iniciar(recibido.capture());
+        assertThat(recibido.getValue().email()).isEqualTo("Ana@Mail.com");
+    }
+
+    @Test
+    void loginSinCuerpoDa400PorqueEsPublicoYNoPorFaltaDeToken() throws Exception {
+        mvc.perform(post(CONTEXTO + "/auth/login").contextPath(CONTEXTO))
+            .andExpect(status().isBadRequest());
+        verify(sesion, never()).iniciar(any());
+    }
+
+    @Test
+    void loginSinContraseniaOConEmailInvalidoDa400() throws Exception {
+        enviar("/auth/login", """
+            {"email":"ana@mail.com"}
+            """)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errores[0].campo").value("contrasenia"));
+        enviar("/auth/login", """
+            {"email":"no-es-un-mail","contrasenia":"clave1234"}
+            """)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errores[0].campo").value("email"));
+    }
+
+    @Test
+    void credencialesInvalidasDa401ConElCodigo() throws Exception {
+        when(sesion.iniciar(any(LoginRequest.class))).thenThrow(new NegocioException(
+            HttpStatus.UNAUTHORIZED, "CREDENCIALES_INVALIDAS", "El correo o la contraseña no son correctos."));
+
+        enviar("/auth/login", """
+            {"email":"ana@mail.com","contrasenia":"mala"}
+            """)
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.codigo").value("CREDENCIALES_INVALIDAS"))
+            .andExpect(jsonPath("$.mensaje").value("El correo o la contraseña no son correctos."));
+    }
+
+    @Test
+    void cuentaSuspendidaDa403ConElCodigo() throws Exception {
+        when(sesion.iniciar(any(LoginRequest.class))).thenThrow(
+            new NegocioException(HttpStatus.FORBIDDEN, "CUENTA_SUSPENDIDA", "Tu cuenta está suspendida."));
+
+        enviar("/auth/login", """
+            {"email":"ana@mail.com","contrasenia":"clave1234"}
+            """)
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.codigo").value("CUENTA_SUSPENDIDA"));
+    }
+
+    // --- A3 refresh ---
+
+    @Test
+    void refreshConCuerpoValidoDa200ConLosTokensNuevos() throws Exception {
+        when(sesion.renovar(any(RefreshRequest.class)))
+            .thenReturn(new TokensResponse("nuevo-access", "nuevo-refresh", Rol.CLIENTE));
+
+        enviar("/auth/refresh", """
+            {"refreshToken":"el-viejo"}
+            """)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").value("nuevo-access"))
+            .andExpect(jsonPath("$.refreshToken").value("nuevo-refresh"))
+            .andExpect(jsonPath("$.rol").value("CLIENTE"));
+    }
+
+    @Test
+    void refreshSinCuerpoOConTokenVacioDa400() throws Exception {
+        mvc.perform(post(CONTEXTO + "/auth/refresh").contextPath(CONTEXTO))
+            .andExpect(status().isBadRequest());
+        enviar("/auth/refresh", """
+            {"refreshToken":"  "}
+            """)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errores[0].campo").value("refreshToken"));
+        verify(sesion, never()).renovar(any());
+    }
+
+    @Test
+    void refreshReusadoDa401RefreshInvalido() throws Exception {
+        when(sesion.renovar(any(RefreshRequest.class))).thenThrow(
+            new NegocioException(HttpStatus.UNAUTHORIZED, "REFRESH_INVALIDO", "Tu sesión venció. Ingresá de nuevo."));
+
+        enviar("/auth/refresh", """
+            {"refreshToken":"ya-usado"}
+            """)
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.codigo").value("REFRESH_INVALIDO"));
     }
 }

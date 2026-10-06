@@ -23,6 +23,7 @@ import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.gestion.controller.AdminUsuarioController;
 import ar.edu.iessf.servife.identidad.controller.AuthController;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
+import ar.edu.iessf.servife.identidad.service.ServicioDeSesion;
 
 /**
  * Base transversal: autenticación, roles y formato único de error (.ai/05, .ai/07).
@@ -49,6 +50,9 @@ class SeguridadYErroresTest {
 
     @MockitoBean
     private ServicioDeRegistro servicioDeRegistro;
+
+    @MockitoBean
+    private ServicioDeSesion servicioDeSesion;
 
     private static JwtRequestPostProcessor como(String rol) {
         return jwt()
@@ -95,7 +99,8 @@ class SeguridadYErroresTest {
 
     @Test
     void loginEsPublico() throws Exception {
+        // Sin token ni cuerpo llega a la validación (400) en vez de cortarse en el filtro (401).
         mvc.perform(post(CONTEXTO + "/auth/login").contextPath(CONTEXTO))
-            .andExpect(status().isNotImplemented());
+            .andExpect(status().isBadRequest());
     }
 }
