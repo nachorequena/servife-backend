@@ -44,6 +44,7 @@ import ar.edu.iessf.servife.identidad.dto.ActualizarUsuarioRequest;
 import ar.edu.iessf.servife.identidad.dto.CambiarContraseniaRequest;
 import ar.edu.iessf.servife.identidad.dto.UsuarioResponse;
 import ar.edu.iessf.servife.identidad.service.ServicioDeCuenta;
+import ar.edu.iessf.servife.identidad.service.ServicioDeRecuperacion;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
 import ar.edu.iessf.servife.identidad.service.ServicioDeSesion;
 
@@ -73,6 +74,9 @@ class UsuarioControllerTest {
 
     @MockitoBean
     private ServicioDeSesion sesion;
+
+    @MockitoBean
+    private ServicioDeRecuperacion recuperacion;
 
     private static JwtRequestPostProcessor como(String rol) {
         return jwt()

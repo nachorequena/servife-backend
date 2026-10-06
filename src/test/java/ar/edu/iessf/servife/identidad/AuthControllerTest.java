@@ -34,16 +34,19 @@ import ar.edu.iessf.servife.config.CorsConfig;
 import ar.edu.iessf.servife.config.JwtConfig;
 import ar.edu.iessf.servife.config.SeguridadConfig;
 import ar.edu.iessf.servife.identidad.controller.AuthController;
+import ar.edu.iessf.servife.identidad.dto.ConfirmarRecuperacionRequest;
 import ar.edu.iessf.servife.identidad.dto.LoginRequest;
+import ar.edu.iessf.servife.identidad.dto.RecuperarRequest;
 import ar.edu.iessf.servife.identidad.dto.RefreshRequest;
 import ar.edu.iessf.servife.identidad.dto.RegistroRequest;
 import ar.edu.iessf.servife.identidad.dto.TokensResponse;
 import ar.edu.iessf.servife.identidad.dto.UsuarioResponse;
 import ar.edu.iessf.servife.identidad.service.ServicioDeCuenta;
+import ar.edu.iessf.servife.identidad.service.ServicioDeRecuperacion;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
 import ar.edu.iessf.servife.identidad.service.ServicioDeSesion;
 
-/** Endpoints de /auth (crece en las Tasks 7 a 9). */
+/** Endpoints de /auth (A1 a A4, A8 y A9). */
 @WebMvcTest(controllers = AuthController.class)
 @Import({SeguridadConfig.class, JwtConfig.class, CorsConfig.class, EscritorDeErrores.class})
 @TestPropertySource(properties = {
@@ -70,6 +73,9 @@ class AuthControllerTest {
 
     @MockitoBean
     private UsuarioActual usuarioActual;
+
+    @MockitoBean
+    private ServicioDeRecuperacion recuperacion;
 
     private ResultActions registrar(String json) throws Exception {
         return mvc.perform(post(CONTEXTO + "/auth/registro").contextPath(CONTEXTO)
@@ -283,5 +289,74 @@ class AuthControllerTest {
             """)
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.codigo").value("REFRESH_INVALIDO"));
+    }
+
+    @Test
+    void recuperarEsPublicoDa204YRecortaElEmail() throws Exception {
+        enviar("/auth/recuperar", """
+            {"email":" Ana@Mail.com "}
+            """)
+            .andExpect(status().isNoContent());
+
+        ArgumentCaptor<RecuperarRequest> recibido = ArgumentCaptor.forClass(RecuperarRequest.class);
+        verify(recuperacion).solicitar(recibido.capture());
+        assertThat(recibido.getValue().email()).isEqualTo("Ana@Mail.com");
+    }
+
+    @Test
+    void recuperarConEmailInvalidoDa400() throws Exception {
+        enviar("/auth/recuperar", """
+            {"email":"no-es-un-mail"}
+            """)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errores[0].campo").value("email"));
+        verify(recuperacion, never()).solicitar(any());
+    }
+
+    @Test
+    void confirmarEsPublicoDa204() throws Exception {
+        enviar("/auth/recuperar/confirmar", """
+            {"email":" ana@mail.com ","codigo":"123456","contraseniaNueva":"nueva-clave9"}
+            """)
+            .andExpect(status().isNoContent());
+
+        ArgumentCaptor<ConfirmarRecuperacionRequest> recibido = ArgumentCaptor.forClass(ConfirmarRecuperacionRequest.class);
+        verify(recuperacion).confirmar(recibido.capture());
+        assertThat(recibido.getValue().email()).isEqualTo("ana@mail.com");
+        assertThat(recibido.getValue().codigo()).isEqualTo("123456");
+    }
+
+    @Test
+    void confirmarConCodigoQueNoSonSeisDigitosDa400EnCodigo() throws Exception {
+        enviar("/auth/recuperar/confirmar", """
+            {"email":"ana@mail.com","codigo":"12a","contraseniaNueva":"nueva-clave9"}
+            """)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.codigo").value("VALIDACION"))
+            .andExpect(jsonPath("$.errores[0].campo").value("codigo"))
+            .andExpect(jsonPath("$.errores[0].detalle").value("son 6 dígitos"));
+        verify(recuperacion, never()).confirmar(any());
+    }
+
+    @Test
+    void confirmarConContraseniaDebilDa400EnContraseniaNueva() throws Exception {
+        enviar("/auth/recuperar/confirmar", """
+            {"email":"ana@mail.com","codigo":"123456","contraseniaNueva":"abcdefgh"}
+            """)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errores[0].campo").value("contraseniaNueva"));
+    }
+
+    @Test
+    void confirmarConCodigoIncorrectoDa400CodigoInvalido() throws Exception {
+        org.mockito.Mockito.doThrow(new NegocioException(HttpStatus.BAD_REQUEST, "CODIGO_INVALIDO",
+            "El código no es válido o venció. Pedí uno nuevo."))
+            .when(recuperacion).confirmar(any(ConfirmarRecuperacionRequest.class));
+
+        enviar("/auth/recuperar/confirmar", """
+            {"email":"ana@mail.com","codigo":"123456","contraseniaNueva":"nueva-clave9"}
+            """)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.codigo").value("CODIGO_INVALIDO"));
     }
 }

@@ -18,6 +18,9 @@ servife-ia, clonado al lado de este: ver ../servife-ia/README.md.
     docker compose up -d --build
     docker compose down
 
+    # Correo de desarrollo: Mailpit atrapa los correos (código de recuperación de contraseña).
+    # Bandeja web en http://localhost:8025 (SMTP interno mailpit:1025, la api ya apunta ahí).
+
     # Tests (con JDK 21 instalado). MigracionesTest usa Testcontainers: necesita Docker corriendo.
     ./mvnw test                          # Windows: mvnw.cmd test
 

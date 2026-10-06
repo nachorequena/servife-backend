@@ -24,6 +24,7 @@ import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.gestion.controller.AdminUsuarioController;
 import ar.edu.iessf.servife.identidad.controller.AuthController;
 import ar.edu.iessf.servife.identidad.service.ServicioDeCuenta;
+import ar.edu.iessf.servife.identidad.service.ServicioDeRecuperacion;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
 import ar.edu.iessf.servife.identidad.service.ServicioDeSesion;
 
@@ -61,6 +62,9 @@ class SeguridadYErroresTest {
 
     @MockitoBean
     private UsuarioActual usuarioActual;
+
+    @MockitoBean
+    private ServicioDeRecuperacion recuperacion;
 
     private static JwtRequestPostProcessor como(String rol) {
         return jwt()

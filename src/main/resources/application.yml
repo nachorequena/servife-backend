@@ -17,6 +17,11 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USUARIO:}
+    password: ${MAIL_CONTRASENIA:}
   jackson:
     time-zone: UTC
   # TODO: tamaño máximo de archivo sin definir (.ai/07-security.md). Hasta entonces, el default de Spring.
@@ -34,6 +39,8 @@ servife:
     secreto: ${JWT_SECRETO}
     duracion-access: 15m
     duracion-refresh: 7d
+  correo:
+    remitente: ${MAIL_REMITENTE:no-responder@servife.local}
   cors:
     origenes-permitidos: ${CORS_ORIGENES:http://localhost:8081}
 

@@ -26,7 +26,8 @@ import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 public class SeguridadConfig {
 
     private static final String[] PUBLICOS = {
-        "/auth/registro", "/auth/login", "/auth/refresh", "/auth/recuperar"
+        "/auth/registro", "/auth/login", "/auth/refresh", "/auth/recuperar",
+        "/auth/recuperar/confirmar"
     };
 
     private static final String[] DOCUMENTACION = {

@@ -9,14 +9,16 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import ar.edu.iessf.servife.common.error.NoImplementadoException;
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
+import ar.edu.iessf.servife.identidad.dto.ConfirmarRecuperacionRequest;
 import ar.edu.iessf.servife.identidad.dto.LoginRequest;
+import ar.edu.iessf.servife.identidad.dto.RecuperarRequest;
 import ar.edu.iessf.servife.identidad.dto.RefreshRequest;
 import ar.edu.iessf.servife.identidad.dto.RegistroRequest;
 import ar.edu.iessf.servife.identidad.dto.TokensResponse;
 import ar.edu.iessf.servife.identidad.dto.UsuarioResponse;
 import ar.edu.iessf.servife.identidad.service.ServicioDeCuenta;
+import ar.edu.iessf.servife.identidad.service.ServicioDeRecuperacion;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
 import ar.edu.iessf.servife.identidad.service.ServicioDeSesion;
 import jakarta.validation.Valid;
@@ -24,8 +26,7 @@ import jakarta.validation.Valid;
 /**
  * Módulo A — Identidad y cuentas (dueño: Pedro Soria).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * A1 (registro), A2 (login), A3 (refresh) y A4 (sesión) están implementados; A8 sigue siendo un stub
- * que responde 501 hasta que se implemente: definí los DTOs en dto/, la lógica en service/ y reemplazá el throw.
+ * Implementados: A1 (registro), A2 (login), A3 (refresh), A4 (sesión), A8 (recuperar) y A9 (confirmar recuperación).
  */
 @RestController
 @RequestMapping("/auth")
@@ -37,13 +38,16 @@ public class AuthController {
 
     private final ServicioDeCuenta cuenta;
 
+    private final ServicioDeRecuperacion recuperacion;
+
     private final UsuarioActual usuarioActual;
 
     public AuthController(ServicioDeRegistro registro, ServicioDeSesion sesion, ServicioDeCuenta cuenta,
-        UsuarioActual usuarioActual) {
+        ServicioDeRecuperacion recuperacion, UsuarioActual usuarioActual) {
         this.registro = registro;
         this.sesion = sesion;
         this.cuenta = cuenta;
+        this.recuperacion = recuperacion;
         this.usuarioActual = usuarioActual;
     }
 
@@ -75,10 +79,19 @@ public class AuthController {
         return ResponseEntity.ok(cuenta.obtener(usuarioActual.uuid(), usuarioActual.rol()));
     }
 
-    /** A8 · POST /auth/recuperar · CU02 · Envía el correo de recuperación. */
+    /** A8 · POST /auth/recuperar · CU02 · Envía por correo un código de 6 dígitos. Siempre 204, exista o no la cuenta. */
     @PreAuthorize("permitAll()")
     @PostMapping("/recuperar")
-    public ResponseEntity<Void> recuperarContrasenia() {
-        throw new NoImplementadoException("A8");
+    public ResponseEntity<Void> recuperarContrasenia(@Valid @RequestBody RecuperarRequest pedido) {
+        recuperacion.solicitar(pedido);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** A9 · POST /auth/recuperar/confirmar · CU02 · Cambia la contraseña con el código recibido. 204 o 400 CODIGO_INVALIDO. */
+    @PreAuthorize("permitAll()")
+    @PostMapping("/recuperar/confirmar")
+    public ResponseEntity<Void> confirmarRecuperacion(@Valid @RequestBody ConfirmarRecuperacionRequest pedido) {
+        recuperacion.confirmar(pedido);
+        return ResponseEntity.noContent().build();
     }
 }

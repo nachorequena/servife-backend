@@ -1,0 +1,22 @@
+package ar.edu.iessf.servife.identidad.repository;
+
+import java.time.Instant;
+import java.util.Optional;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import ar.edu.iessf.servife.identidad.domain.CodigoRecuperacion;
+
+public interface CodigoRecuperacionRepository extends JpaRepository<CodigoRecuperacion, Long> {
+
+    /** El último código sin usar del email (que debe venir normalizado). */
+    Optional<CodigoRecuperacion> findFirstByEmailAndUsadoEnIsNullOrderByIdDesc(String email);
+
+    /** Marca como usados todos los códigos pendientes del email: pedir uno nuevo invalida los anteriores. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update CodigoRecuperacion c set c.usadoEn = :ahora where c.email = :email and c.usadoEn is null")
+    int invalidarPendientes(@Param("email") String email, @Param("ahora") Instant ahora);
+}
