@@ -45,6 +45,11 @@ servife:
     duracion-refresh: 7d
   correo:
     remitente: ${MAIL_REMITENTE:no-responder@servife.local}
+  # Primer gestor: solo se crea si no hay ninguno. Vacío = no hace nada.
+  gestor-inicial:
+    email: ${GESTOR_INICIAL_EMAIL:}
+    contrasenia: ${GESTOR_INICIAL_CONTRASENIA:}
+    nombre: ${GESTOR_INICIAL_NOMBRE:}
   cors:
     origenes-permitidos: ${CORS_ORIGENES:http://localhost:8081}
 

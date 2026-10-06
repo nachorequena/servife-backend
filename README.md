@@ -21,6 +21,10 @@ servife-ia, clonado al lado de este: ver ../servife-ia/README.md.
     # Correo de desarrollo: Mailpit atrapa los correos (código de recuperación de contraseña).
     # Bandeja web en http://localhost:8025 (SMTP interno mailpit:1025, la api ya apunta ahí).
 
+    # Primer gestor: un gestor solo lo crea otro gestor, así que el primero sale del .env.
+    # Completar GESTOR_INICIAL_EMAIL y GESTOR_INICIAL_CONTRASENIA (y opcional _NOMBRE); se crea al arrancar
+    # solo si no hay ningún gestor. Después se pueden dejar vacías.
+
     # Tests (con JDK 21 instalado). MigracionesTest usa Testcontainers: necesita Docker corriendo.
     ./mvnw test                          # Windows: mvnw.cmd test
 
