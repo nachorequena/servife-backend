@@ -29,6 +29,7 @@ import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.common.error.NegocioException;
 import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.common.seguridad.Rol;
+import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.config.CorsConfig;
 import ar.edu.iessf.servife.config.JwtConfig;
 import ar.edu.iessf.servife.config.SeguridadConfig;
@@ -38,6 +39,7 @@ import ar.edu.iessf.servife.identidad.dto.RefreshRequest;
 import ar.edu.iessf.servife.identidad.dto.RegistroRequest;
 import ar.edu.iessf.servife.identidad.dto.TokensResponse;
 import ar.edu.iessf.servife.identidad.dto.UsuarioResponse;
+import ar.edu.iessf.servife.identidad.service.ServicioDeCuenta;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
 import ar.edu.iessf.servife.identidad.service.ServicioDeSesion;
 
@@ -62,6 +64,12 @@ class AuthControllerTest {
 
     @MockitoBean
     private ServicioDeSesion sesion;
+
+    @MockitoBean
+    private ServicioDeCuenta cuenta;
+
+    @MockitoBean
+    private UsuarioActual usuarioActual;
 
     private ResultActions registrar(String json) throws Exception {
         return mvc.perform(post(CONTEXTO + "/auth/registro").contextPath(CONTEXTO)

@@ -10,11 +10,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import ar.edu.iessf.servife.common.error.NoImplementadoException;
+import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.identidad.dto.LoginRequest;
 import ar.edu.iessf.servife.identidad.dto.RefreshRequest;
 import ar.edu.iessf.servife.identidad.dto.RegistroRequest;
 import ar.edu.iessf.servife.identidad.dto.TokensResponse;
 import ar.edu.iessf.servife.identidad.dto.UsuarioResponse;
+import ar.edu.iessf.servife.identidad.service.ServicioDeCuenta;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
 import ar.edu.iessf.servife.identidad.service.ServicioDeSesion;
 import jakarta.validation.Valid;
@@ -22,9 +24,8 @@ import jakarta.validation.Valid;
 /**
  * Módulo A — Identidad y cuentas (dueño: Pedro Soria).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * A1 (registro), A2 (login) y A3 (refresh) están implementados; los demás endpoints son stubs que
- * responden 501 hasta que se
- * implementen: definí los DTOs en dto/, la lógica en service/ y reemplazá el throw.
+ * A1 (registro), A2 (login), A3 (refresh) y A4 (sesión) están implementados; A8 sigue siendo un stub
+ * que responde 501 hasta que se implemente: definí los DTOs en dto/, la lógica en service/ y reemplazá el throw.
  */
 @RestController
 @RequestMapping("/auth")
@@ -34,9 +35,16 @@ public class AuthController {
 
     private final ServicioDeSesion sesion;
 
-    public AuthController(ServicioDeRegistro registro, ServicioDeSesion sesion) {
+    private final ServicioDeCuenta cuenta;
+
+    private final UsuarioActual usuarioActual;
+
+    public AuthController(ServicioDeRegistro registro, ServicioDeSesion sesion, ServicioDeCuenta cuenta,
+        UsuarioActual usuarioActual) {
         this.registro = registro;
         this.sesion = sesion;
+        this.cuenta = cuenta;
+        this.usuarioActual = usuarioActual;
     }
 
     /** A1 · POST /auth/registro · CU01 · Solo CLIENTE o PRESTADOR. Si es prestador recibe idTipoServicio y crea todo en una transacción; queda PENDIENTE. */
@@ -63,8 +71,8 @@ public class AuthController {
     /** A4 · GET /auth/me · CU02 · Datos del usuario autenticado. La app lo llama al abrir. */
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/me")
-    public ResponseEntity<Void> obtenerSesion() {
-        throw new NoImplementadoException("A4");
+    public ResponseEntity<UsuarioResponse> obtenerSesion() {
+        return ResponseEntity.ok(cuenta.obtener(usuarioActual.uuid(), usuarioActual.rol()));
     }
 
     /** A8 · POST /auth/recuperar · CU02 · Envía el correo de recuperación. */

@@ -20,8 +20,10 @@ import ar.edu.iessf.servife.catalogo.controller.PrestadorController;
 import ar.edu.iessf.servife.catalogo.controller.TipoServicioController;
 import ar.edu.iessf.servife.catalogo.service.TipoServicioService;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
+import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.gestion.controller.AdminUsuarioController;
 import ar.edu.iessf.servife.identidad.controller.AuthController;
+import ar.edu.iessf.servife.identidad.service.ServicioDeCuenta;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRegistro;
 import ar.edu.iessf.servife.identidad.service.ServicioDeSesion;
 
@@ -53,6 +55,12 @@ class SeguridadYErroresTest {
 
     @MockitoBean
     private ServicioDeSesion servicioDeSesion;
+
+    @MockitoBean
+    private ServicioDeCuenta servicioDeCuenta;
+
+    @MockitoBean
+    private UsuarioActual usuarioActual;
 
     private static JwtRequestPostProcessor como(String rol) {
         return jwt()
