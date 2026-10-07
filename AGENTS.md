@@ -32,7 +32,14 @@ Antes de escribir una de estas, usá la que está. No la copies a tu módulo.
 | Saber quién hace la request | common/seguridad/UsuarioActual (uuid y rol, desde el JWT) |
 | Emitir un JWT (módulo A) | El JwtEncoder de config/JwtConfig, header HS256, claims sub = uuid y rol |
 | Hashear una contraseña | El PasswordEncoder (BCrypt) de config/SeguridadConfig |
+| Buscar una cuenta de cualquiera de los tres roles | identidad/service/Cuentas (buscarPorUuid(uuid, rol), buscarPorEmail, emailRegistrado, normalizar) y la interfaz identidad/domain/Cuenta. Nunca consultes los tres repositorios a mano |
+| Revocar la sesión de un usuario (ej. al suspender una cuenta, E4) | ServicioDeTokens.revocarTodos(uuid) |
+| Mandar un correo | common/correo/EnviadorDeCorreos |
+| Rechazar un campo con 400 | common/error/ValidacionException(campo, detalle): devuelve VALIDACION con un ErrorCampo |
+| Validar una contraseña | identidad/service/Contrasenias: la regla (REGLA, MENSAJE) y validarLargo (máximo 72 bytes, límite de BCrypt) |
+| La hora actual | El bean Clock de config/RelojConfig; no llames a Instant.now() directo, así los tests la fijan |
 | Cambiar el esquema | Una migración nueva V<n>__descripcion.sql, con n = la última de main + 1. Nunca editar V1 |
 
+Los tests de integración con Testcontainers se llaman *Test, no *IT: surefire no corre los *IT.
 Tests: cada endpoint lleva test de servicio (Mockito) y de controller (@WebMvcTest). Para el
 controller, config/SeguridadYErroresTest muestra cómo levantar la seguridad y simular un JWT con rol.
