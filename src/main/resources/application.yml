@@ -28,6 +28,10 @@ spring:
     password: ${MAIL_CONTRASENIA:}
   jackson:
     time-zone: UTC
+  # Mensajes de Bean Validation siempre en español, sin depender del Accept-Language del cliente.
+  web:
+    locale: es
+    locale-resolver: fixed
   # TODO: tamaño máximo de archivo sin definir (.ai/07-security.md). Hasta entonces, el default de Spring.
   # servlet:
   #   multipart:

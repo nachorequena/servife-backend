@@ -15,6 +15,9 @@ public interface CodigoRecuperacionRepository extends JpaRepository<CodigoRecupe
     /** El último código sin usar del email (que debe venir normalizado). */
     Optional<CodigoRecuperacion> findFirstByEmailAndUsadoEnIsNullOrderByIdDesc(String email);
 
+    /** Cuántos códigos se emitieron para el email (normalizado) desde el instante dado, usados o no. */
+    long countByEmailAndCreadoEnAfter(String email, Instant desde);
+
     /** Marca como usados todos los códigos pendientes del email: pedir uno nuevo invalida los anteriores. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update CodigoRecuperacion c set c.usadoEn = :ahora where c.email = :email and c.usadoEn is null")

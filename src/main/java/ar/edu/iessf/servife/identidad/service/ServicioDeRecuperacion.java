@@ -26,6 +26,9 @@ import ar.edu.iessf.servife.identidad.repository.CodigoRecuperacionRepository;
 public class ServicioDeRecuperacion {
 
     static final Duration VIGENCIA = Duration.ofMinutes(15);
+    /** Tope de códigos por email en la última hora: corta la fuerza bruta pidiendo códigos nuevos sin parar. */
+    static final int MAX_CODIGOS_POR_HORA = 5;
+    private static final Duration VENTANA_DE_TOPE = Duration.ofHours(1);
 
     private final SecureRandom azar = new SecureRandom();
     private final Cuentas cuentas;
@@ -47,7 +50,8 @@ public class ServicioDeRecuperacion {
 
     /**
      * A8. Si el email tiene cuenta, invalida los códigos anteriores y envía uno nuevo. Con un email
-     * inexistente o dado de baja no guarda ni envía nada: el llamador siempre responde 204.
+     * inexistente o dado de baja no guarda ni envía nada: el llamador siempre responde 204. Lo mismo si
+     * el email ya pidió {@value #MAX_CODIGOS_POR_HORA} códigos en la última hora: se ignora el pedido en silencio.
      */
     @Transactional
     public void solicitar(RecuperarRequest pedido) {
@@ -56,6 +60,9 @@ public class ServicioDeRecuperacion {
             return;
         }
         Instant ahora = reloj.instant();
+        if (codigos.countByEmailAndCreadoEnAfter(email, ahora.minus(VENTANA_DE_TOPE)) >= MAX_CODIGOS_POR_HORA) {
+            return;
+        }
         codigos.invalidarPendientes(email, ahora);
         String codigo = "%06d".formatted(azar.nextInt(1_000_000));
         codigos.save(new CodigoRecuperacion(email, Hashes.sha256Hex(codigo), ahora, ahora.plus(VIGENCIA)));

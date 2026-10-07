@@ -5,6 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 /** A7 · Cambio de contraseña verificando la actual. */
-public record CambiarContraseniaRequest(@NotBlank String contraseniaActual,
-    @NotBlank @Pattern(regexp = Contrasenias.REGLA, message = Contrasenias.MENSAJE) String contraseniaNueva) {
+public record CambiarContraseniaRequest(@NotBlank(message = "es obligatorio") String contraseniaActual,
+    @NotBlank(message = "es obligatorio") @Pattern(regexp = Contrasenias.REGLA, message = Contrasenias.MENSAJE) String contraseniaNueva) {
 }

@@ -4,7 +4,10 @@ import java.nio.charset.StandardCharsets;
 
 import ar.edu.iessf.servife.common.error.ValidacionException;
 
-/** Regla única de contraseña (registro, recuperación): 8 a 72 caracteres (límite de BCrypt), con letra y número. */
+/**
+ * Regla única de contraseña (registro, recuperación): 8 a 72 caracteres, con letra y número. El límite
+ * real de BCrypt es de 72 bytes en UTF-8, no de caracteres: {@link #validarLargo} lo comprueba aparte.
+ */
 public final class Contrasenias {
 
     public static final String REGLA = "^(?=.*[A-Za-z])(?=.*\\d).{8,72}$";

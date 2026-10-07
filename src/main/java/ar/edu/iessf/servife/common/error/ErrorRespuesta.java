@@ -5,7 +5,8 @@ import java.util.List;
 
 /**
  * Formato único de error de toda la API (.ai/05-api-contract.md).
- * errores va vacío salvo en los 400 de validación.
+ * errores trae el detalle por campo en los 400 de validación y en algunos 409 (ej. EMAIL_YA_REGISTRADO);
+ * va vacío en el resto de los errores, incluido el 400 CODIGO_INVALIDO.
  */
 public record ErrorRespuesta(
         Instant timestamp,

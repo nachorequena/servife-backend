@@ -20,7 +20,8 @@ import ar.edu.iessf.servife.common.error.NoImplementadoException;
 /**
  * Módulo B — Catálogo y búsqueda (dueño: Juan Pablo Saravia).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * Cada método es un stub que responde 501 hasta que se implemente: definí los DTOs en dto/,
+ * B1 (listar tipos de servicio) está implementado y es público. B2 a B4 son stubs que responden 501
+ * hasta que se implementen: definí los DTOs en dto/,
  * la lógica en service/ y reemplazá el throw.
  */
 @RestController

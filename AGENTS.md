@@ -43,3 +43,4 @@ Antes de escribir una de estas, usá la que está. No la copies a tu módulo.
 Los tests de integración con Testcontainers se llaman *Test, no *IT: surefire no corre los *IT.
 Tests: cada endpoint lleva test de servicio (Mockito) y de controller (@WebMvcTest). Para el
 controller, config/SeguridadYErroresTest muestra cómo levantar la seguridad y simular un JWT con rol.
+Si le das dependencias a un controller que carga SeguridadYErroresTest (PrestadorController, AdminUsuarioController, TipoServicioController, AuthController), sumá su @MockitoBean ahí.

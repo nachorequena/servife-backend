@@ -4,7 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 /** A8 · cuerpo del pedido de código de recuperación. */
-public record RecuperarRequest(@NotBlank @Email String email) {
+public record RecuperarRequest(@NotBlank(message = "es obligatorio") @Email(message = "no es un correo válido") String email) {
 
     /** Recorta el email antes de validar: " Ana@Mail.com " es la misma cuenta que "Ana@Mail.com". */
     public RecuperarRequest {

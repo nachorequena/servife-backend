@@ -182,6 +182,24 @@ class ServicioDeRecuperacionTest {
     }
 
     @Test
+    void elSextoPedidoEnUnaHoraNoCreaCodigoNiEnviaCorreoYPasadaLaHoraVuelveAFuncionar() {
+        guardarAna();
+        for (int i = 0; i < 5; i++) {
+            pedirCodigo();
+        }
+        assertThat(codigos.findAll()).hasSize(5);
+
+        servicio.solicitar(new RecuperarRequest("ana@mail.com"));
+
+        assertThat(codigos.findAll()).hasSize(5);
+        verify(correos, times(5)).enviar(anyString(), anyString(), anyString());
+
+        reloj.avanzar(Duration.ofMinutes(61));
+        pedirCodigo();
+        assertThat(codigos.findAll()).hasSize(6);
+    }
+
+    @Test
     void confirmarConElCodigoCorrectoCambiaLaContraseniaMarcaUsadoYRevocaLosRefresh() {
         Cliente ana = guardarAna();
         String hashAnterior = ana.getContrasenia();

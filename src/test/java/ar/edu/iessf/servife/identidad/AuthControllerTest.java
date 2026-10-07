@@ -1,5 +1,6 @@
 package ar.edu.iessf.servife.identidad;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -228,6 +229,16 @@ class AuthControllerTest {
             """)
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.errores[0].campo").value("email"));
+    }
+
+    @Test
+    void loginConCamposVaciosDevuelveLosDetallesEnEspaniol() throws Exception {
+        enviar("/auth/login", """
+            {"email":"","contrasenia":""}
+            """)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errores[?(@.campo=='email')].detalle").value(hasItem("es obligatorio")))
+            .andExpect(jsonPath("$.errores[?(@.campo=='contrasenia')].detalle").value(hasItem("es obligatorio")));
     }
 
     @Test
