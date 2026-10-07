@@ -29,7 +29,8 @@ public class ManejadorGlobalDeErrores {
 
     @ExceptionHandler(NegocioException.class)
     public ResponseEntity<ErrorRespuesta> negocio(NegocioException e, HttpServletRequest request) {
-        return responder(e.getStatus(), e.getCodigo(), e.getMessage(), request);
+        return ResponseEntity.status(e.getStatus()).body(ErrorRespuesta.de(e.getStatus().value(), e.getCodigo(),
+            e.getMessage(), request.getRequestURI(), e.getErrores()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

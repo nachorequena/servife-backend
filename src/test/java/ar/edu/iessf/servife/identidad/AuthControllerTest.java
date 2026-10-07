@@ -25,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import ar.edu.iessf.servife.common.error.ConflictoException;
+import ar.edu.iessf.servife.common.error.ErrorCampo;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.common.error.NegocioException;
 import ar.edu.iessf.servife.common.error.ValidacionException;
@@ -150,11 +151,14 @@ class AuthControllerTest {
     @Test
     void emailYaRegistradoDa409() throws Exception {
         when(registro.registrar(any(RegistroRequest.class)))
-            .thenThrow(new ConflictoException("EMAIL_YA_REGISTRADO", "Ese correo ya tiene una cuenta."));
+            .thenThrow(new ConflictoException("EMAIL_YA_REGISTRADO", "Ese correo ya tiene una cuenta.",
+                new ErrorCampo("email", "ya existe")));
 
         registrar(cuerpo("CLIENTE", "clave1234"))
             .andExpect(status().isConflict())
-            .andExpect(jsonPath("$.codigo").value("EMAIL_YA_REGISTRADO"));
+            .andExpect(jsonPath("$.codigo").value("EMAIL_YA_REGISTRADO"))
+            .andExpect(jsonPath("$.errores[0].campo").value("email"))
+            .andExpect(jsonPath("$.errores[0].detalle").value("ya existe"));
     }
 
     @Test

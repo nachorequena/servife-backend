@@ -121,6 +121,7 @@ class ServicioDeRegistroTest {
             new RegistroRequest("CLIENTE", "Gaby", "Gaby@mail.com", CLAVE, null)))
             .isInstanceOfSatisfying(ConflictoException.class, e -> {
                 assertThat(e.getCodigo()).isEqualTo("EMAIL_YA_REGISTRADO");
+                assertThat(e.getErrores()).containsExactly(new ar.edu.iessf.servife.common.error.ErrorCampo("email", "ya existe"));
                 assertThat(e.getMessage()).isEqualTo("Ese correo ya tiene una cuenta.");
             });
         verify(clientes, never()).saveAndFlush(any());

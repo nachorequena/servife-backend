@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ar.edu.iessf.servife.catalogo.domain.TipoServicio;
 import ar.edu.iessf.servife.catalogo.repository.TipoServicioRepository;
 import ar.edu.iessf.servife.common.error.ConflictoException;
+import ar.edu.iessf.servife.common.error.ErrorCampo;
 import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
 import ar.edu.iessf.servife.identidad.domain.Cuenta;
@@ -87,6 +88,7 @@ public class ServicioDeRegistro {
     }
 
     private static ConflictoException emailYaRegistrado() {
-        return new ConflictoException("EMAIL_YA_REGISTRADO", "Ese correo ya tiene una cuenta.");
+        return new ConflictoException("EMAIL_YA_REGISTRADO", "Ese correo ya tiene una cuenta.",
+            new ErrorCampo("email", "ya existe"));
     }
 }

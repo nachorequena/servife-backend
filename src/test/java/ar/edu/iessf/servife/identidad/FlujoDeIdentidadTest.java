@@ -145,7 +145,10 @@ class FlujoDeIdentidadTest {
         login(email, CONTRASENIA_A9, 200);
 
         // Mismo email como cliente: 409
-        assertThat(enviar("/auth/registro", 409, Map.of("rol", "CLIENTE", "nombreApellido", "Otra Persona",
-            "email", email, "contrasenia", CONTRASENIA)).get("codigo").asText()).isEqualTo("EMAIL_YA_REGISTRADO");
+        var conflicto = enviar("/auth/registro", 409, Map.of("rol", "CLIENTE", "nombreApellido", "Otra Persona",
+            "email", email, "contrasenia", CONTRASENIA));
+        assertThat(conflicto.get("codigo").asText()).isEqualTo("EMAIL_YA_REGISTRADO");
+        assertThat(conflicto.get("errores").get(0).get("campo").asText()).isEqualTo("email");
+        assertThat(conflicto.get("errores").get(0).get("detalle").asText()).isEqualTo("ya existe");
     }
 }
