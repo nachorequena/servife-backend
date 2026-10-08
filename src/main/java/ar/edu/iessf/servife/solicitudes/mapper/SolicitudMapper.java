@@ -34,12 +34,24 @@ public final class SolicitudMapper {
         return new SolicitudResponse(s.getUuid(), s.getEstado(),
             parte(s.getCliente(), s.getCliente().getTelefono(), conTelefono),
             parte(s.getPrestador(), s.getPrestador().getTelefono(), conTelefono),
-            new TipoServicioResponse(t.getUuid(), t.getNombre(), t.getIcono(), t.isRequiereMatricula()),
+            tipo(t),
             s.getFechaDeseada(), s.getHoraPreferida(), s.getDireccion(), s.getDescripcion(), imagenIds,
             s.getPrecioAcordado(), s.getMotivo(),
             s.getCanceladaPor() == null ? null : s.getCanceladaPor().name(),
             s.getCreadoEn(), s.getActualizadoEn(),
             MaquinaDeEstados.accionesDisponibles(s.getEstado(), rolActual));
+    }
+
+    /** La otra parte de la solicitud, vista desde rolActual (el cliente ve al prestador y viceversa). */
+    public static ParteResponse contraparte(Solicitud s, Rol rolActual) {
+        boolean conTelefono = CON_TELEFONO.contains(s.getEstado());
+        return rolActual == Rol.CLIENTE
+            ? parte(s.getPrestador(), s.getPrestador().getTelefono(), conTelefono)
+            : parte(s.getCliente(), s.getCliente().getTelefono(), conTelefono);
+    }
+
+    public static TipoServicioResponse tipo(TipoServicio t) {
+        return new TipoServicioResponse(t.getUuid(), t.getNombre(), t.getIcono(), t.isRequiereMatricula());
     }
 
     private static ParteResponse parte(Cuenta cuenta, String telefono, boolean conTelefono) {

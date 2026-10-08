@@ -1,6 +1,7 @@
 package ar.edu.iessf.servife.solicitudes.controller;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import ar.edu.iessf.servife.common.error.NoImplementadoException;
+import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.common.paginacion.Pagina;
 import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
 import ar.edu.iessf.servife.solicitudes.dto.CrearSolicitudRequest;
@@ -29,7 +31,7 @@ import jakarta.validation.Valid;
 /**
  * Módulo C — Solicitudes (dueño: Tomás Ferreyra).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * C1, C2 y C3 están implementados; C4 es un stub que responden 501 hasta que se implementen.
+ * C1, C2 y C3 están implementados; C4 es un stub que responde 501 hasta que se implemente.
  */
 @RestController
 @RequestMapping("/solicitudes")
@@ -54,9 +56,17 @@ public class SolicitudController {
     /** C2 · GET /solicitudes · CU06, CU09 · Las del usuario autenticado, filtrable por estado. Paginado. */
     @PreAuthorize("hasAnyRole('CLIENTE', 'PRESTADOR')")
     @GetMapping
-    public Pagina<SolicitudEnListaResponse> listarMias(@RequestParam(required = false) List<EstadoSolicitud> estado,
+    public Pagina<SolicitudEnListaResponse> listarMias(@RequestParam(required = false) List<String> estado,
             @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
-        return servicio.listarMias(estado, page, size);
+        List<EstadoSolicitud> estados = new ArrayList<>();
+        for (String valor : estado == null ? List.<String>of() : estado) {
+            try {
+                estados.add(EstadoSolicitud.valueOf(valor));
+            } catch (IllegalArgumentException e) {
+                throw new ValidacionException("estado", "no es un estado válido");
+            }
+        }
+        return servicio.listarMias(estados, page, size);
     }
 
     /** C3 · GET /solicitudes/{uuid} · CU06, CU09 · 404 si no sos parte de la solicitud. */

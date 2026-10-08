@@ -152,7 +152,9 @@ class ListadoYDetalleDeSolicitudesTest {
 
         mvc.perform(get(API + "/solicitudes").param("estado", "XXX")
                 .contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.codigo").value("VALIDACION"))
+            .andExpect(jsonPath("$.errores[0].campo").value("estado"));
     }
 
     @Test
@@ -183,6 +185,46 @@ class ListadoYDetalleDeSolicitudesTest {
         mvc.perform(get(API + "/solicitudes").contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
             .andExpect(jsonPath("$.contenido[0].descripcion").value("y".repeat(140)))
             .andExpect(jsonPath("$.contenido[1].descripcion").value("x".repeat(140) + "…"));
+    }
+
+    @Test
+    void noCortaUnEmojiALaMitadAlTruncar() throws Exception {
+        // 139 letras + emoji (2 unidades UTF-16) + resto: el límite de 140 caracteres cae justo después del emoji
+        solicitud(ana, beto, EstadoSolicitud.PENDIENTE, "x".repeat(139) + "😀" + "zzz", T0);
+
+        String cuerpo = mvc.perform(get(API + "/solicitudes").contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
+            .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        String texto = new com.fasterxml.jackson.databind.ObjectMapper().readTree(cuerpo)
+            .get("contenido").get(0).get("descripcion").asText();
+        org.junit.jupiter.api.Assertions.assertEquals("x".repeat(139) + "😀…", texto);
+        org.junit.jupiter.api.Assertions.assertEquals(141, texto.codePointCount(0, texto.length()));
+        // ida y vuelta por UTF-8: un sustituto suelto se perdería en la conversión
+        org.junit.jupiter.api.Assertions.assertEquals(texto, new String(
+            texto.getBytes(java.nio.charset.StandardCharsets.UTF_8), java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void clienteYPrestadorConElMismoIdInternoSoloVenLoSuyo() throws Exception {
+        Prestador pedro = prestador("Pedro Tubo", "5555");
+        UUID otraAna = UUID.randomUUID();
+        jdbc.update("INSERT INTO clientes (id_cliente, uuid, nombre_apellido, email, contrasenia) OVERRIDING SYSTEM VALUE VALUES (?, ?, 'Otra Ana', ?, 'h')",
+            pedro.getId(), otraAna, otraAna + "@mail.com");
+        Cliente clienteMismoId = clientes.findByUuidAndEliminadoEnIsNull(otraAna).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals(pedro.getId(), clienteMismoId.getId());
+
+        Solicitud delCliente = solicitud(clienteMismoId, beto, EstadoSolicitud.PENDIENTE, "del cliente", T0);
+        Solicitud delPrestador = solicitud(luis, pedro, EstadoSolicitud.PENDIENTE, "del prestador", T0.plusSeconds(1));
+
+        mvc.perform(get(API + "/solicitudes").contextPath(API).with(como(otraAna, "CLIENTE")))
+            .andExpect(jsonPath("$.contenido", hasSize(1)))
+            .andExpect(jsonPath("$.contenido[0].descripcion").value("del cliente"));
+        mvc.perform(get(API + "/solicitudes").contextPath(API).with(como(pedro.getUuid(), "PRESTADOR")))
+            .andExpect(jsonPath("$.contenido", hasSize(1)))
+            .andExpect(jsonPath("$.contenido[0].descripcion").value("del prestador"));
+        mvc.perform(get(API + "/solicitudes/" + delPrestador.getUuid()).contextPath(API).with(como(otraAna, "CLIENTE")))
+            .andExpect(status().isNotFound());
+        mvc.perform(get(API + "/solicitudes/" + delCliente.getUuid()).contextPath(API).with(como(pedro.getUuid(), "PRESTADOR")))
+            .andExpect(status().isNotFound());
     }
 
     @Test

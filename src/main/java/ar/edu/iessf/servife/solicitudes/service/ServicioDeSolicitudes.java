@@ -37,13 +37,13 @@ import ar.edu.iessf.servife.reputacion.repository.ArchivoRepository;
 import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
 import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
 import ar.edu.iessf.servife.solicitudes.dto.CrearSolicitudRequest;
-import ar.edu.iessf.servife.solicitudes.dto.ParteResponse;
 import ar.edu.iessf.servife.solicitudes.dto.SolicitudEnListaResponse;
 import ar.edu.iessf.servife.solicitudes.dto.SolicitudResponse;
 import ar.edu.iessf.servife.solicitudes.mapper.SolicitudMapper;
 import ar.edu.iessf.servife.solicitudes.repository.SolicitudRepository;
 
-/** Solicitudes de servicio: C1 (crear, CU06), C2 (listar) y C3 (ver). C1: todo en una transacción: solicitud, imágenes y aviso. */
+/** Solicitudes de servicio: C1 (crear, CU06), C2 (listar) y C3 (ver).
+ * C1 corre en una sola transacción: solicitud, imágenes y aviso. */
 @Service
 public class ServicioDeSolicitudes {
 
@@ -142,13 +142,13 @@ public class ServicioDeSolicitudes {
     }
 
     private SolicitudEnListaResponse enLista(Solicitud s, Rol rol) {
-        SolicitudResponse completa = SolicitudMapper.aRespuesta(s, List.of(), rol);
-        ParteResponse contraparte = rol == Rol.CLIENTE ? completa.prestador() : completa.cliente();
         String descripcion = s.getDescripcion();
-        if (descripcion.length() > LARGO_DESCRIPCION_EN_LISTA) {
-            descripcion = descripcion.substring(0, LARGO_DESCRIPCION_EN_LISTA) + "…";
+        // se corta por caracteres Unicode, no por unidades UTF-16: un emoji no queda partido
+        if (descripcion.codePointCount(0, descripcion.length()) > LARGO_DESCRIPCION_EN_LISTA) {
+            descripcion = descripcion.substring(0, descripcion.offsetByCodePoints(0, LARGO_DESCRIPCION_EN_LISTA)) + "…";
         }
-        return new SolicitudEnListaResponse(s.getUuid(), s.getEstado(), contraparte, completa.tipoServicio(),
+        return new SolicitudEnListaResponse(s.getUuid(), s.getEstado(), SolicitudMapper.contraparte(s, rol),
+            SolicitudMapper.tipo(s.getTipoServicio()),
             s.getFechaDeseada(), s.getHoraPreferida(), descripcion, s.getDireccion(), s.getCreadoEn());
     }
 
