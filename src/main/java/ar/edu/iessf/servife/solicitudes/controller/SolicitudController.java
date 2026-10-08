@@ -1,5 +1,6 @@
 package ar.edu.iessf.servife.solicitudes.controller;
 
+import java.net.URI;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
@@ -8,26 +9,41 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
 import ar.edu.iessf.servife.common.error.NoImplementadoException;
+import ar.edu.iessf.servife.solicitudes.dto.CrearSolicitudRequest;
+import ar.edu.iessf.servife.solicitudes.dto.SolicitudResponse;
+import ar.edu.iessf.servife.solicitudes.service.ServicioDeSolicitudes;
+import jakarta.validation.Valid;
 
 /**
  * Módulo C — Solicitudes (dueño: Tomás Ferreyra).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * Cada método es un stub que responde 501 hasta que se implemente: definí los DTOs en dto/,
- * la lógica en service/ y reemplazá el throw.
+ * C1 está implementado; los demás métodos son stubs que responden 501 hasta que se implementen.
  */
 @RestController
 @RequestMapping("/solicitudes")
 public class SolicitudController {
 
+    private final ServicioDeSolicitudes servicio;
+
+    public SolicitudController(ServicioDeSolicitudes servicio) {
+        this.servicio = servicio;
+    }
+
     /** C1 · POST /solicitudes · CU06 · Fecha deseada, hora preferida, dirección, descripción e imagenIds ya subidas (D7). Queda PENDIENTE y habilita el chat (D03). 201 con Location. */
     @PreAuthorize("hasRole('CLIENTE')")
     @PostMapping
-    public ResponseEntity<Void> crear() {
-        throw new NoImplementadoException("C1");
+    public ResponseEntity<SolicitudResponse> crear(@Valid @RequestBody CrearSolicitudRequest pedido) {
+        SolicitudResponse creada = servicio.crear(pedido);
+        URI ubicacion = ServletUriComponentsBuilder.fromCurrentRequest().path("/{uuid}")
+            .buildAndExpand(creada.uuid()).toUri();
+        return ResponseEntity.created(ubicacion).body(creada);
     }
 
     /** C2 · GET /solicitudes · CU06, CU09 · Las del usuario autenticado, filtrable por estado. Paginado. */
