@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -93,7 +94,7 @@ public class ServicioDeSolicitudes {
             pedido.descripcion().trim(), pedido.fechaDeseada(), horaONula(pedido.horaPreferida()),
             pedido.direccion().trim()));
         for (Archivo imagen : imagenes) {
-            solicitudes.vincularImagen(solicitud.getId(), imagen.getId());
+            vincular(solicitud, imagen);
         }
 
         avisos.avisar(prestador, TipoDeAviso.SOLICITUD_NUEVA, "Nueva solicitud",
@@ -119,6 +120,18 @@ public class ServicioDeSolicitudes {
             resultado.add(a);
         }
         return resultado;
+    }
+
+    /** El índice único cubre la carrera: si otra solicitud ganó la imagen, es el mismo error de validación. */
+    private void vincular(Solicitud solicitud, Archivo imagen) {
+        try {
+            solicitudes.vincularImagen(solicitud.getId(), imagen.getId());
+        } catch (DataIntegrityViolationException e) {
+            if (e.getMessage() != null && e.getMessage().contains("uq_solicitud_imagenes_archivo")) {
+                throw imagenInvalida();
+            }
+            throw e;
+        }
     }
 
     private static ValidacionException imagenInvalida() {

@@ -85,6 +85,7 @@ class ServicioDeSolicitudesTest {
         volatile Instant ahora = JUEVES_MEDIODIA_ART;
 
         @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+        /** Devuelve un reloj fijo en el instante actual (no sigue los cambios posteriores de "ahora"). */
         @Override public Clock withZone(ZoneId zone) { return Clock.fixed(ahora, zone); }
         @Override public Instant instant() { return ahora; }
     }
@@ -296,5 +297,43 @@ class ServicioDeSolicitudesTest {
         crear(ana, Map.of("uuidPrestador", beto.getUuid()))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.codigo").value("VALIDACION"));
+    }
+
+    @Test
+    void elIndiceUnicoRechazaUnaSegundaVinculacionDeLaImagen() throws Exception {
+        UUID imagen = subir(ana);
+        crear(ana, cuerpo(beto.getUuid(), "2026-10-09", List.of(imagen))).andExpect(status().isCreated());
+        Long otraSolicitud = jdbc.queryForObject("""
+            INSERT INTO solicitudes_servicio (id_cliente, id_prestador, id_tipo_servicio, descripcion)
+            VALUES (?, ?, (SELECT id_tipo_servicio FROM prestadores WHERE id_prestador = ?), 'x') RETURNING id_solicitud""",
+            Long.class, ana.getId(), beto.getId(), beto.getId());
+
+        org.junit.jupiter.api.Assertions.assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+            () -> jdbc.update("INSERT INTO solicitud_imagenes (id_solicitud, id_archivo) SELECT ?, id_archivo FROM archivos WHERE uuid = ?",
+                otraSolicitud, imagen));
+    }
+
+    @Test
+    void dosSolicitudesConLaMismaImagenAlMismoTiempoUnaGanaYLaOtraEs400() throws Exception {
+        UUID imagen = subir(ana);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.CyclicBarrier salida = new java.util.concurrent.CyclicBarrier(2);
+        try {
+            List<java.util.concurrent.Future<Integer>> resultados = new java.util.ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                resultados.add(pool.submit(() -> {
+                    salida.await();
+                    return crear(ana, cuerpo(beto.getUuid(), "2026-10-09", List.of(imagen)))
+                        .andReturn().getResponse().getStatus();
+                }));
+            }
+            List<Integer> estados = new java.util.ArrayList<>();
+            for (var f : resultados) {
+                estados.add(f.get());
+            }
+            assertThat(estados).containsExactlyInAnyOrder(201, 400);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 }

@@ -15,5 +15,5 @@ public record CrearSolicitudRequest(
         @Size(max = 40, message = "tiene que tener como máximo 40 caracteres") String horaPreferida,
         @NotBlank(message = "es obligatoria") @Size(max = 255, message = "tiene que tener como máximo 255 caracteres") String direccion,
         @NotBlank(message = "es obligatoria") @Size(max = 2000, message = "tiene que tener como máximo 2000 caracteres") String descripcion,
-        @Size(max = 5, message = "puede tener como máximo 5 imágenes") List<UUID> imagenIds) {
+        @Size(max = 5, message = "puede tener como máximo 5 imágenes") List<@NotNull(message = "no puede haber imágenes vacías") UUID> imagenIds) {
 }
