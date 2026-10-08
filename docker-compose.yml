@@ -41,8 +41,12 @@ services:
       GESTOR_INICIAL_EMAIL: ${GESTOR_INICIAL_EMAIL:-}
       GESTOR_INICIAL_CONTRASENIA: ${GESTOR_INICIAL_CONTRASENIA:-}
       GESTOR_INICIAL_NOMBRE: ${GESTOR_INICIAL_NOMBRE:-}
+      ARCHIVOS_DIR: /data/archivos
+    volumes:
+      - archivos:/data/archivos
     ports:
       - "8080:8080"
 
 volumes:
   datos-db:
+  archivos:

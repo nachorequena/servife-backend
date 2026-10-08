@@ -8,7 +8,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -67,6 +71,28 @@ public class ManejadorGlobalDeErrores {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ErrorRespuesta> archivoGrande(MaxUploadSizeExceededException e, HttpServletRequest request) {
         return responder(HttpStatus.PAYLOAD_TOO_LARGE, "ARCHIVO_DEMASIADO_GRANDE", "El archivo supera el tamaño máximo.", request);
+    }
+
+    /** Falta una parte multipart o un parámetro obligatorio. */
+    @ExceptionHandler({MissingServletRequestPartException.class, MissingServletRequestParameterException.class})
+    public ResponseEntity<ErrorRespuesta> faltaCampo(Exception e, HttpServletRequest request) {
+        String nombre = e instanceof MissingServletRequestPartException p ? p.getRequestPartName()
+            : ((MissingServletRequestParameterException) e).getParameterName();
+        ErrorRespuesta cuerpo = ErrorRespuesta.de(HttpStatus.BAD_REQUEST.value(), "VALIDACION",
+            "Hay campos con errores.", request.getRequestURI(), List.of(new ErrorCampo(nombre, "es obligatorio")));
+        return ResponseEntity.badRequest().body(cuerpo);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorRespuesta> tipoDeContenido(HttpMediaTypeNotSupportedException e, HttpServletRequest request) {
+        return responder(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "TIPO_DE_CONTENIDO_NO_SOPORTADO",
+            "El tipo de contenido no es válido.", request);
+    }
+
+    /** Multipart mal formado (el caso de tamaño tiene su propio handler, más específico). */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ErrorRespuesta> multipartInvalido(MultipartException e, HttpServletRequest request) {
+        return responder(HttpStatus.BAD_REQUEST, "SOLICITUD_INVALIDA", "La solicitud no tiene el formato esperado.", request);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
