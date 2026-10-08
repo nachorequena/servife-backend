@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import ar.edu.iessf.servife.catalogo.domain.TipoServicio;
 import ar.edu.iessf.servife.identidad.domain.Prestador;
 
 public interface PrestadorRepository extends JpaRepository<Prestador, Long> {
@@ -16,4 +17,7 @@ public interface PrestadorRepository extends JpaRepository<Prestador, Long> {
     boolean existsByEmail(String email);
 
     Optional<Prestador> findByUuidAndEliminadoEnIsNull(UUID uuid);
+
+    /** Si hay prestadores no dados de baja (de cualquier estado) con ese tipo de servicio. */
+    boolean existsByTipoServicioAndEliminadoEnIsNull(TipoServicio tipoServicio);
 }

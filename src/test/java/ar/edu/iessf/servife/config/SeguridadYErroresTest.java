@@ -103,7 +103,8 @@ class SeguridadYErroresTest {
 
     @Test
     void preAuthorizeRechazaRolInsuficienteCon403() throws Exception {
-        mvc.perform(post(CONTEXTO + "/tipos-servicio").contextPath(CONTEXTO).with(como("CLIENTE")))
+        mvc.perform(post(CONTEXTO + "/tipos-servicio").contextPath(CONTEXTO).with(como("CLIENTE"))
+                .contentType("application/json").content("{\"nombre\":\"X\",\"icono\":\"water\",\"requiereMatricula\":false}"))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.codigo").value("ACCESO_DENEGADO"));
     }

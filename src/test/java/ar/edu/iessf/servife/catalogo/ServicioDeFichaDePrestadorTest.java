@@ -97,6 +97,17 @@ class ServicioDeFichaDePrestadorTest {
     }
 
     @Test
+    void prestadorCuyoTipoFueDadoDeBajaEs404() {
+        UUID id = aprobado();
+        jdbc.update("UPDATE tipos_servicio SET eliminado_en = now() WHERE nombre = 'Gas'");
+        try {
+            assertThatThrownBy(() -> ficha.obtener(id)).isInstanceOf(RecursoNoEncontradoException.class);
+        } finally {
+            jdbc.update("UPDATE tipos_servicio SET eliminado_en = NULL WHERE nombre = 'Gas'");
+        }
+    }
+
+    @Test
     void sinValoracionNiDiasLaFichaVieneVacia() {
         PrestadorDetalleResponse r = ficha.obtener(aprobado());
         assertThat(r.valoracionPromedio()).isNull();

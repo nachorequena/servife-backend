@@ -169,6 +169,18 @@ class BuscadorDePrestadoresTest {
         assertThat(nombresDe("")).isEmpty();
     }
 
+    @Test
+    void prestadorCuyoTipoFueDadoDeBajaNoAparece() throws Exception {
+        prestador("Sin Rubro Vigente", "Jardinería").guardar();
+        prestador("Con Rubro Vigente", "Gas").guardar();
+        jdbc.update("UPDATE tipos_servicio SET eliminado_en = now() WHERE nombre = 'Jardinería'");
+        try {
+            assertThat(nombresDe("")).containsExactly("Con Rubro Vigente");
+        } finally {
+            jdbc.update("UPDATE tipos_servicio SET eliminado_en = NULL WHERE nombre = 'Jardinería'");
+        }
+    }
+
     // ─── Filtros ────────────────────────────────────────────────────────────
 
     @Test

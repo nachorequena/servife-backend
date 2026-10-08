@@ -47,6 +47,11 @@ public abstract class EntidadBase {
         eliminadoEn = Instant.now();
     }
 
+    /** Revierte la baja lógica. */
+    public void restaurar() {
+        eliminadoEn = null;
+    }
+
     public boolean estaEliminado() {
         return eliminadoEn != null;
     }

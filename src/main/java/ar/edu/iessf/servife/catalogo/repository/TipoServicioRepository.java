@@ -13,4 +13,7 @@ public interface TipoServicioRepository extends JpaRepository<TipoServicio, Long
     List<TipoServicio> findByEliminadoEnIsNullOrderByNombre();
 
     Optional<TipoServicio> findByUuidAndEliminadoEnIsNull(UUID uuid);
+
+    /** Incluye los dados de baja: el nombre no se libera (UNIQUE global en la base). */
+    Optional<TipoServicio> findByNombreIgnoreCase(String nombre);
 }

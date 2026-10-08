@@ -78,7 +78,8 @@ public class BusquedaDePrestadoresRepository {
 
     private static String armarWhere(Criterios c, MapSqlParameterSource params) {
         List<String> condiciones = new ArrayList<>(List.of(
-            "p.estado_validacion = 'APROBADO'", "p.estado_cuenta = 'ACTIVA'", "p.eliminado_en IS NULL"));
+            "p.estado_validacion = 'APROBADO'", "p.estado_cuenta = 'ACTIVA'", "p.eliminado_en IS NULL",
+            "t.eliminado_en IS NULL"));
         if (c.q() != null) {
             condiciones.add("(p.nombre_apellido ILIKE :q OR t.nombre ILIKE :q)");
             params.addValue("q", "%" + c.q().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%");

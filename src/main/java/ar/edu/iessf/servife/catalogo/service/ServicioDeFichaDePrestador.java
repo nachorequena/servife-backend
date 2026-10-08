@@ -40,12 +40,13 @@ public class ServicioDeFichaDePrestador {
         this.jdbc = jdbc;
     }
 
-    /** 404 si no existe, está dado de baja, no está APROBADO o su cuenta está SUSPENDIDA. */
+    /** 404 si no existe, está dado de baja, no está APROBADO, su cuenta está SUSPENDIDA o su tipo de servicio fue dado de baja. */
     @Transactional(readOnly = true)
     public PrestadorDetalleResponse obtener(UUID uuid) {
         Prestador p = prestadores.findByUuidAndEliminadoEnIsNull(uuid)
             .filter(x -> x.getEstadoValidacion() == EstadoValidacion.APROBADO
                 && x.getEstadoCuenta() == EstadoCuenta.ACTIVA)
+            .filter(x -> !x.getTipoServicio().estaEliminado())
             .orElseThrow(() -> new RecursoNoEncontradoException("No existe."));
         TipoServicio t = p.getTipoServicio();
         List<Integer> dias = disponibilidades.findByPrestadorAndEliminadoEnIsNullOrderByDiaSemana(p).stream()
