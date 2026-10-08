@@ -32,10 +32,10 @@ spring:
   web:
     locale: es
     locale-resolver: fixed
-  # TODO: tamaño máximo de archivo sin definir (.ai/07-security.md). Hasta entonces, el default de Spring.
-  # servlet:
-  #   multipart:
-  #     max-file-size:
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 
 server:
   servlet:
@@ -47,6 +47,9 @@ servife:
     secreto: ${JWT_SECRETO}
     duracion-access: 15m
     duracion-refresh: 7d
+  archivos:
+    # Carpeta donde se guardan las imágenes subidas (en Docker, un volumen).
+    directorio: ${ARCHIVOS_DIR:./archivos}
   correo:
     remitente: ${MAIL_REMITENTE:no-responder@servife.local}
   # Primer gestor: solo se crea si no hay ninguno. Vacío = no hace nada.

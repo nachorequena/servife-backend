@@ -16,3 +16,6 @@ bin/
 # SO
 .DS_Store
 Thumbs.db
+
+# Imágenes subidas en desarrollo
+/archivos/
