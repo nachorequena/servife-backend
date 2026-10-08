@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ar.edu.iessf.servife.catalogo.domain.Disponibilidad;
 import ar.edu.iessf.servife.catalogo.repository.DisponibilidadRepository;
+import ar.edu.iessf.servife.common.error.ConflictoException;
 import ar.edu.iessf.servife.common.error.RecursoNoEncontradoException;
 import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.common.paginacion.Pagina;
@@ -27,6 +28,7 @@ import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.gestion.service.Avisos;
 import ar.edu.iessf.servife.gestion.service.TipoDeAviso;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
+import ar.edu.iessf.servife.identidad.domain.Cuenta;
 import ar.edu.iessf.servife.identidad.domain.EstadoCuenta;
 import ar.edu.iessf.servife.identidad.domain.EstadoValidacion;
 import ar.edu.iessf.servife.identidad.domain.Prestador;
@@ -34,15 +36,18 @@ import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 import ar.edu.iessf.servife.reputacion.domain.Archivo;
 import ar.edu.iessf.servife.reputacion.repository.ArchivoRepository;
+import ar.edu.iessf.servife.solicitudes.domain.AccionSobreSolicitud;
 import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
+import ar.edu.iessf.servife.solicitudes.domain.MaquinaDeEstados;
 import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
+import ar.edu.iessf.servife.solicitudes.dto.CambioDeEstadoRequest;
 import ar.edu.iessf.servife.solicitudes.dto.CrearSolicitudRequest;
 import ar.edu.iessf.servife.solicitudes.dto.SolicitudEnListaResponse;
 import ar.edu.iessf.servife.solicitudes.dto.SolicitudResponse;
 import ar.edu.iessf.servife.solicitudes.mapper.SolicitudMapper;
 import ar.edu.iessf.servife.solicitudes.repository.SolicitudRepository;
 
-/** Solicitudes de servicio: C1 (crear, CU06), C2 (listar) y C3 (ver).
+/** Solicitudes de servicio: C1 (crear, CU06), C2 (listar), C3 (ver) y C4 (cambiar estado).
  * C1 corre en una sola transacción: solicitud, imágenes y aviso. */
 @Service
 public class ServicioDeSolicitudes {
@@ -133,12 +138,86 @@ public class ServicioDeSolicitudes {
     @Transactional(readOnly = true)
     public SolicitudResponse obtener(UUID uuid) {
         Rol rol = usuarioActual.rol();
+        Solicitud s = parteDe(uuid, rol);
+        return SolicitudMapper.aRespuesta(s, solicitudes.uuidsDeImagenes(s.getId()), rol);
+    }
+
+    /**
+     * C4. Una sola transacción: valida la transición (MaquinaDeEstados) y las reglas de fecha y extras,
+     * aplica el UPDATE condicional y avisa a la contraparte. Si otro cambió la solicitud entre la lectura
+     * y el UPDATE (0 filas), 409 TRANSICION_INVALIDA y no se avisa nada.
+     */
+    @Transactional
+    public SolicitudResponse cambiarEstado(UUID uuid, CambioDeEstadoRequest pedido) {
+        Rol rol = usuarioActual.rol();
+        Solicitud s = parteDe(uuid, rol);
+        AccionSobreSolicitud accion = pedido.accion();
+        EstadoSolicitud origen = s.getEstado();
+        EstadoSolicitud destino = MaquinaDeEstados.destino(origen, accion, rol);
+
+        if (accion == AccionSobreSolicitud.INICIAR && s.getFechaDeseada() != null
+                && LocalDate.now(clock.withZone(ARGENTINA)).isBefore(s.getFechaDeseada())) {
+            throw new ConflictoException("TODAVIA_NO_ES_LA_FECHA", "Todavía no llegó la fecha del trabajo.");
+        }
+        if (pedido.precioAcordado() != null && accion != AccionSobreSolicitud.ACEPTAR) {
+            throw new ValidacionException("precioAcordado", "solo se puede indicar al aceptar");
+        }
+        String motivo = pedido.motivo() == null || pedido.motivo().isBlank() ? null : pedido.motivo().trim();
+        if (pedido.motivo() != null && !pedido.motivo().isBlank()
+                && accion != AccionSobreSolicitud.RECHAZAR && accion != AccionSobreSolicitud.CANCELAR) {
+            throw new ValidacionException("motivo", "solo se puede indicar al rechazar o cancelar");
+        }
+
+        int filas = solicitudes.cambiarEstado(s.getId(), origen, destino, motivo,
+            accion == AccionSobreSolicitud.CANCELAR ? rol : null, pedido.precioAcordado(), clock.instant());
+        if (filas == 0) {
+            throw new ConflictoException("TRANSICION_INVALIDA", "La solicitud cambió mientras tanto. Recargala.");
+        }
+
+        // el UPDATE limpió el contexto: se recarga para responder y para avisar con los datos vigentes
+        Solicitud actual = solicitudes.findDetalleByUuidAndEliminadoEnIsNull(uuid).orElseThrow();
+        avisarCambio(actual, destino, rol);
+        return SolicitudMapper.aRespuesta(actual, solicitudes.uuidsDeImagenes(actual.getId()), rol);
+    }
+
+    /** Aviso a la otra parte: quién actuó, qué hizo, y motivo o precio si hay. */
+    private void avisarCambio(Solicitud s, EstadoSolicitud destino, Rol actor) {
+        boolean actuoElCliente = actor == Rol.CLIENTE;
+        Cuenta quien = actuoElCliente ? s.getCliente() : s.getPrestador();
+        Cuenta destinatario = actuoElCliente ? s.getPrestador() : s.getCliente();
+        TipoDeAviso tipo;
+        String titulo;
+        String verbo;
+        switch (destino) {
+            case ACEPTADA -> { tipo = TipoDeAviso.SOLICITUD_ACEPTADA; titulo = "Aceptaron tu solicitud"; verbo = "aceptó"; }
+            case RECHAZADA -> { tipo = TipoDeAviso.SOLICITUD_RECHAZADA; titulo = "Rechazaron tu solicitud"; verbo = "rechazó"; }
+            case EN_CURSO -> { tipo = TipoDeAviso.SOLICITUD_EN_CURSO; titulo = "Empezó el trabajo"; verbo = "inició"; }
+            case FINALIZADA -> { tipo = TipoDeAviso.SOLICITUD_FINALIZADA; titulo = "Terminó el trabajo"; verbo = "finalizó"; }
+            case CANCELADA -> { tipo = TipoDeAviso.SOLICITUD_CANCELADA; titulo = "Cancelaron la solicitud"; verbo = "canceló"; }
+            default -> throw new IllegalStateException("Sin aviso para " + destino);
+        }
+        StringBuilder cuerpo = new StringBuilder(quien.getNombreApellido()).append(' ').append(verbo)
+            .append(" la solicitud");
+        if (s.getFechaDeseada() != null) {
+            cuerpo.append(" del ").append(s.getFechaDeseada().format(DIA_MES_ANIO));
+        }
+        cuerpo.append('.');
+        if (s.getMotivo() != null && (destino == EstadoSolicitud.RECHAZADA || destino == EstadoSolicitud.CANCELADA)) {
+            cuerpo.append(" Motivo: ").append(s.getMotivo());
+        }
+        if (destino == EstadoSolicitud.ACEPTADA && s.getPrecioAcordado() != null) {
+            cuerpo.append(" Precio acordado: ").append(Dinero.pesos(s.getPrecioAcordado()));
+        }
+        avisos.avisar(destinatario, tipo, titulo, cuerpo.toString(), s.getUuid());
+    }
+
+    /** La solicitud si el usuario es parte de ella; si no existe, está dada de baja o es ajena, 404. */
+    private Solicitud parteDe(UUID uuid, Rol rol) {
         UUID yo = usuarioActual.uuid();
-        Solicitud s = solicitudes.findDetalleByUuidAndEliminadoEnIsNull(uuid)
+        return solicitudes.findDetalleByUuidAndEliminadoEnIsNull(uuid)
             .filter(x -> rol == Rol.CLIENTE && yo.equals(x.getCliente().getUuid())
                 || rol == Rol.PRESTADOR && yo.equals(x.getPrestador().getUuid()))
             .orElseThrow(() -> new RecursoNoEncontradoException("No existe."));
-        return SolicitudMapper.aRespuesta(s, solicitudes.uuidsDeImagenes(s.getId()), rol);
     }
 
     private SolicitudEnListaResponse enLista(Solicitud s, Rol rol) {

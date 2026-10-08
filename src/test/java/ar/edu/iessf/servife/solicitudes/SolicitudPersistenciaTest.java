@@ -23,6 +23,7 @@ import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
 import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
+import ar.edu.iessf.servife.solicitudes.domain.SolicitudDePrueba;
 import ar.edu.iessf.servife.solicitudes.repository.SolicitudRepository;
 import jakarta.persistence.EntityManager;
 
@@ -60,9 +61,7 @@ class SolicitudPersistenciaTest {
         Solicitud s = new Solicitud(ana, beto, tipo, "Pérdida en la cocina", LocalDate.of(2026, 10, 20),
             "A la tarde", "Calle 1 123");
         assertThat(s.getEstado()).isEqualTo(EstadoSolicitud.PENDIENTE);
-        s.cambiarEstado(EstadoSolicitud.ACEPTADA);
-        s.fijarPrecioAcordado(1_500_000L);
-        s.cancelar(Rol.PRESTADOR, "Me surgió otro trabajo");
+        SolicitudDePrueba.enEstado(s, EstadoSolicitud.CANCELADA, "Me surgió otro trabajo", Rol.PRESTADOR, 1_500_000L);
         solicitudes.saveAndFlush(s);
         em.clear();
 

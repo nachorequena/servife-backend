@@ -22,8 +22,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 /**
- * Pedido de un cliente a un prestador (tabla solicitudes_servicio). Los cambios de estado pasan por
- * MaquinaDeEstados; la entidad solo los registra. DynamicUpdate: el UPDATE incluye solo lo modificado.
+ * Pedido de un cliente a un prestador (tabla solicitudes_servicio). Los cambios de estado los decide
+ * MaquinaDeEstados y se aplican con un UPDATE condicional del repositorio (C4); la entidad no los muta. DynamicUpdate: el UPDATE incluye solo lo modificado.
  */
 @Entity
 @Table(name = "solicitudes_servicio")
@@ -89,23 +89,12 @@ public class Solicitud extends EntidadBase {
         this.direccion = direccion;
     }
 
-    public void cambiarEstado(EstadoSolicitud nuevo) {
-        this.estado = nuevo;
-    }
-
-    public void registrarMotivo(String motivo) {
+    /** Solo para armar escenarios de prueba: en producción el estado cambia únicamente por el UPDATE condicional de C4. */
+    void restaurar(EstadoSolicitud estado, String motivo, Rol canceladaPor, Long precioAcordado) {
+        this.estado = estado;
         this.motivo = motivo;
-    }
-
-    /** Pasa a CANCELADA registrando quién canceló y el motivo (opcional). */
-    public void cancelar(Rol quien, String motivo) {
-        this.estado = EstadoSolicitud.CANCELADA;
-        this.canceladaPor = quien;
-        this.motivo = motivo;
-    }
-
-    public void fijarPrecioAcordado(Long centavos) {
-        this.precioAcordado = centavos;
+        this.canceladaPor = canceladaPor;
+        this.precioAcordado = precioAcordado;
     }
 
     public Long getId() {

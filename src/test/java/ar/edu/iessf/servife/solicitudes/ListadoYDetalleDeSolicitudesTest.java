@@ -35,6 +35,7 @@ import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
 import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
+import ar.edu.iessf.servife.solicitudes.domain.SolicitudDePrueba;
 import ar.edu.iessf.servife.solicitudes.repository.SolicitudRepository;
 
 /** C2 (GET /solicitudes) y C3 (GET /solicitudes/{uuid}) contra PostgreSQL real. */
@@ -88,7 +89,7 @@ class ListadoYDetalleDeSolicitudesTest {
     /** Crea una solicitud con el creado_en indicado (para controlar el orden). */
     private Solicitud solicitud(Cliente c, Prestador p, EstadoSolicitud estado, String descripcion, Instant creadoEn) {
         Solicitud s = new Solicitud(c, p, tipo, descripcion, LocalDate.of(2026, 10, 9), "mañana", "Calle 1 123");
-        s.cambiarEstado(estado);
+        SolicitudDePrueba.enEstado(s, estado);
         s = solicitudes.saveAndFlush(s);
         jdbc.update("UPDATE solicitudes_servicio SET creado_en = ? WHERE id_solicitud = ?",
             java.sql.Timestamp.from(creadoEn), s.getId());

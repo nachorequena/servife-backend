@@ -18,10 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-import ar.edu.iessf.servife.common.error.NoImplementadoException;
+
 import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.common.paginacion.Pagina;
 import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
+import ar.edu.iessf.servife.solicitudes.dto.CambioDeEstadoRequest;
 import ar.edu.iessf.servife.solicitudes.dto.CrearSolicitudRequest;
 import ar.edu.iessf.servife.solicitudes.dto.SolicitudEnListaResponse;
 import ar.edu.iessf.servife.solicitudes.dto.SolicitudResponse;
@@ -31,7 +32,7 @@ import jakarta.validation.Valid;
 /**
  * Módulo C — Solicitudes (dueño: Tomás Ferreyra).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * C1, C2 y C3 están implementados; C4 es un stub que responde 501 hasta que se implemente.
+ * C1, C2, C3 y C4 están implementados.
  */
 @RestController
 @RequestMapping("/solicitudes")
@@ -76,10 +77,10 @@ public class SolicitudController {
         return servicio.obtener(uuid);
     }
 
-    /** C4 · PATCH /solicitudes/{uuid}/estado · CU09 · Única puerta de cambio de estado (.ai/02-context.md §Máquina de estados). Salto inválido: 409 TRANSICION_INVALIDA. Notifica a la contraparte. */
+    /** C4 · PATCH /solicitudes/{uuid}/estado · CU09 · Única puerta de cambio de estado (.ai/02-context.md §Máquina de estados). Salto inválido: 409 TRANSICION_INVALIDA. Notifica a la contraparte. 200 con la solicitud actualizada. */
     @PreAuthorize("hasAnyRole('CLIENTE', 'PRESTADOR')")
     @PatchMapping("/{uuid}/estado")
-    public ResponseEntity<Void> cambiarEstado(@PathVariable UUID uuid) {
-        throw new NoImplementadoException("C4");
+    public SolicitudResponse cambiarEstado(@PathVariable UUID uuid, @Valid @RequestBody CambioDeEstadoRequest pedido) {
+        return servicio.cambiarEstado(uuid, pedido);
     }
 }
