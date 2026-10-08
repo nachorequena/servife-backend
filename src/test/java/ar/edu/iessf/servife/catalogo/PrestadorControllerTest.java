@@ -28,6 +28,7 @@ import ar.edu.iessf.servife.catalogo.controller.PrestadorController;
 import ar.edu.iessf.servife.catalogo.dto.DisponibilidadResponse;
 import ar.edu.iessf.servife.catalogo.dto.PerfilDeServicioResponse;
 import ar.edu.iessf.servife.catalogo.dto.TipoServicioResponse;
+import ar.edu.iessf.servife.catalogo.service.BuscadorDePrestadores;
 import ar.edu.iessf.servife.catalogo.service.ServicioDePerfilDePrestador;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.common.seguridad.Rol;
@@ -54,6 +55,7 @@ class PrestadorControllerTest {
 
     @Autowired private MockMvc mvc;
     @MockitoBean private ServicioDePerfilDePrestador servicio;
+    @MockitoBean private BuscadorDePrestadores buscador;
     @MockitoBean private UsuarioActual usuarioActual;
 
     private static JwtRequestPostProcessor como(String rol) {

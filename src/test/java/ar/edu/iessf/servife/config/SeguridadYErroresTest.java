@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import ar.edu.iessf.servife.catalogo.controller.PrestadorController;
 import ar.edu.iessf.servife.catalogo.controller.TipoServicioController;
+import ar.edu.iessf.servife.catalogo.service.BuscadorDePrestadores;
 import ar.edu.iessf.servife.catalogo.service.ServicioDePerfilDePrestador;
 import ar.edu.iessf.servife.catalogo.service.TipoServicioService;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
@@ -70,6 +71,9 @@ class SeguridadYErroresTest {
     @MockitoBean
     private ServicioDePerfilDePrestador perfilDePrestador;
 
+    @MockitoBean
+    private BuscadorDePrestadores buscadorDePrestadores;
+
     private static JwtRequestPostProcessor como(String rol) {
         return jwt()
             .jwt(j -> j.subject("7f1c2d4e-0000-4000-8000-000000000001").claim(JwtConfig.CLAIM_ROL, rol))
@@ -78,11 +82,11 @@ class SeguridadYErroresTest {
 
     @Test
     void sinTokenDevuelve401ConElFormatoDeError() throws Exception {
-        mvc.perform(get(CONTEXTO + "/prestadores").contextPath(CONTEXTO))
+        mvc.perform(get(CONTEXTO + "/admin/usuarios").contextPath(CONTEXTO))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.status").value(401))
             .andExpect(jsonPath("$.codigo").value("NO_AUTENTICADO"))
-            .andExpect(jsonPath("$.path").value("/api/v1/prestadores"))
+            .andExpect(jsonPath("$.path").value("/api/v1/admin/usuarios"))
             .andExpect(jsonPath("$.errores").isArray());
     }
 
@@ -102,7 +106,7 @@ class SeguridadYErroresTest {
 
     @Test
     void endpointSinImplementarDevuelve501() throws Exception {
-        mvc.perform(get(CONTEXTO + "/prestadores").contextPath(CONTEXTO).with(como("CLIENTE")))
+        mvc.perform(get(CONTEXTO + "/admin/usuarios").contextPath(CONTEXTO).with(como("GESTOR")))
             .andExpect(status().isNotImplemented())
             .andExpect(jsonPath("$.codigo").value("NO_IMPLEMENTADO"));
     }

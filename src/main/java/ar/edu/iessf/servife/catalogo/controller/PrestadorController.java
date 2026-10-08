@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,7 +16,11 @@ import ar.edu.iessf.servife.catalogo.dto.ActualizarPerfilDePrestadorRequest;
 import ar.edu.iessf.servife.catalogo.dto.DisponibilidadRequest;
 import ar.edu.iessf.servife.catalogo.dto.DisponibilidadResponse;
 import ar.edu.iessf.servife.catalogo.dto.PerfilDeServicioResponse;
+import ar.edu.iessf.servife.catalogo.dto.FiltrosDeBusqueda;
+import ar.edu.iessf.servife.catalogo.dto.PrestadorEnListaResponse;
+import ar.edu.iessf.servife.catalogo.service.BuscadorDePrestadores;
 import ar.edu.iessf.servife.catalogo.service.ServicioDePerfilDePrestador;
+import ar.edu.iessf.servife.common.paginacion.Pagina;
 import ar.edu.iessf.servife.common.error.NoImplementadoException;
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import jakarta.validation.Valid;
@@ -23,7 +28,7 @@ import jakarta.validation.Valid;
 /**
  * Módulo B — Catálogo y búsqueda (dueño: Juan Pablo Saravia).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * B7, B8 y GET /prestadores/me/perfil están implementados; B5 y B6 siguen como stub (501).
+ * B5, B7, B8 y GET /prestadores/me/perfil están implementados; B6 siguen como stub (501).
  */
 @RestController
 @RequestMapping("/prestadores")
@@ -31,18 +36,22 @@ public class PrestadorController {
 
     private final ServicioDePerfilDePrestador perfiles;
 
+    private final BuscadorDePrestadores buscador;
+
     private final UsuarioActual usuarioActual;
 
-    public PrestadorController(ServicioDePerfilDePrestador perfiles, UsuarioActual usuarioActual) {
+    public PrestadorController(ServicioDePerfilDePrestador perfiles, BuscadorDePrestadores buscador,
+            UsuarioActual usuarioActual) {
         this.perfiles = perfiles;
+        this.buscador = buscador;
         this.usuarioActual = usuarioActual;
     }
 
-    /** B5 · GET /prestadores · CU04 · Solo APROBADOS y no suspendidos. Filtros: tipoServicioId, lat, lng, radioKm, puntajeMin, dias, orden. Sin filtro de precio (D02). Paginado. */
+    /** B5 · GET /prestadores · CU04 · Solo APROBADOS, ACTIVOS y no dados de baja. Filtros: q, tipoServicioId, lat+lng, puntajeMin, dias, orden. Sin filtro de precio (D02). Paginado. */
     @PreAuthorize("isAuthenticated()")
     @GetMapping
-    public ResponseEntity<Void> buscar() {
-        throw new NoImplementadoException("B5");
+    public ResponseEntity<Pagina<PrestadorEnListaResponse>> buscar(@ModelAttribute FiltrosDeBusqueda filtros) {
+        return ResponseEntity.ok(buscador.buscar(filtros));
     }
 
     /** GET /prestadores/me/perfil · CU03 · Perfil de servicio propio, para precargar la pantalla. */
