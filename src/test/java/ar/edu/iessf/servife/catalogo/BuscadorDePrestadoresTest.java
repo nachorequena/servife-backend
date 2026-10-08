@@ -344,7 +344,10 @@ class BuscadorDePrestadoresTest {
 
     @Test
     void parametroConTipoIncorrectoDevuelve400() throws Exception {
-        mvc.perform(pedido("lat=abc&lng=1")).andExpect(status().isBadRequest());
+        mvc.perform(pedido("lat=abc&lng=1")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.codigo").value("VALIDACION"))
+            .andExpect(jsonPath("$.errores[0].campo").value("lat"))
+            .andExpect(jsonPath("$.errores[0].detalle").value("tiene un formato inválido"));
         mvc.perform(pedido("tipoServicioId=no-es-uuid")).andExpect(status().isBadRequest());
         mvc.perform(pedido("dias=lunes")).andExpect(status().isBadRequest());
     }
