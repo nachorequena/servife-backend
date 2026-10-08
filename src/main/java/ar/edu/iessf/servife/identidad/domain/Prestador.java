@@ -22,8 +22,11 @@ import jakarta.persistence.Table;
 /**
  * Cuenta de prestador (tabla prestadores): columnas de identidad y de perfil de servicio
  * (zona, lat, lng, radio_km, descripcion; valoracion_promedio es solo lectura).
+ * UPDATE dinámico: solo escribe las columnas modificadas, así guardar el perfil (B7) no pisa
+ * una decisión concurrente del gestor sobre estado_validacion (E6).
  */
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "prestadores")
 public class Prestador extends EntidadBase implements Cuenta {
 

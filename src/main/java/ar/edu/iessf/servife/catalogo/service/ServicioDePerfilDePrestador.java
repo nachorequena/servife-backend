@@ -1,5 +1,7 @@
 package ar.edu.iessf.servife.catalogo.service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,7 +47,7 @@ public class ServicioDePerfilDePrestador {
         return aRespuesta(prestadorActual(idPrestador));
     }
 
-    /** B7: guarda rubro, zona, punto, radio y descripción. Cambiar de rubro lo manda a revisión (PENDIENTE). */
+    /** B7: guarda rubro, zona, punto (redondeado a ~1 km), radio y descripción. Cambiar de rubro lo manda a revisión (PENDIENTE). */
     @Transactional
     public PerfilDeServicioResponse actualizarPerfil(UUID idPrestador, ActualizarPerfilDePrestadorRequest pedido) {
         Prestador prestador = prestadorActual(idPrestador);
@@ -55,7 +57,7 @@ public class ServicioDePerfilDePrestador {
             throw new ValidacionException("lat", "Indicá latitud y longitud juntas, o ninguna");
         }
         prestador.cambiarTipoServicio(tipo);
-        prestador.actualizarPerfil(textoOnulo(pedido.zona()), pedido.lat(), pedido.lng(), pedido.radioKm(),
+        prestador.actualizarPerfil(textoOnulo(pedido.zona()), aproximar(pedido.lat()), aproximar(pedido.lng()), pedido.radioKm(),
             textoOnulo(pedido.descripcion()));
         return aRespuesta(prestadores.saveAndFlush(prestador));
     }
@@ -83,6 +85,11 @@ public class ServicioDePerfilDePrestador {
         return cuentas.buscarPorUuid(idPrestador, Rol.PRESTADOR)
             .filter(Prestador.class::isInstance).map(Prestador.class::cast)
             .orElseThrow(() -> new RecursoNoEncontradoException("No encontramos al prestador"));
+    }
+
+    /** Privacidad: el punto se guarda con 2 decimales (~1 km) para que la búsqueda no revele la ubicación exacta. */
+    private static BigDecimal aproximar(BigDecimal coordenada) {
+        return coordenada == null ? null : coordenada.setScale(2, RoundingMode.HALF_UP);
     }
 
     private static String textoOnulo(String texto) {

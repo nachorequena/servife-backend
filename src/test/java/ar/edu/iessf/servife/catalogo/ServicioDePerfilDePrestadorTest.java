@@ -61,13 +61,13 @@ class ServicioDePerfilDePrestadorTest {
         Prestador p = guardarPrestador("p1@mail.com", tipo(0));
 
         PerfilDeServicioResponse r = servicio.actualizarPerfil(p.getUuid(), pedido(tipo(0).getUuid(),
-            "  Centro, Santa Fe ", new BigDecimal("-31.633300"), new BigDecimal("-60.700000"), 15, " Gasista matriculado "));
+            "  Centro, Santa Fe ", new BigDecimal("-31.633345"), new BigDecimal("-60.705000"), 15, " Gasista matriculado "));
 
         assertThat(r.zona()).isEqualTo("Centro, Santa Fe");
         assertThat(r.descripcion()).isEqualTo("Gasista matriculado");
         assertThat(r.radioKm()).isEqualTo(15);
-        assertThat(r.lat()).isEqualByComparingTo("-31.6333");
-        assertThat(r.lng()).isEqualByComparingTo("-60.7");
+        assertThat(r.lat()).isEqualByComparingTo("-31.63");
+        assertThat(r.lng()).isEqualByComparingTo("-60.71");
         assertThat(r.tipoServicio().uuid()).isEqualTo(tipo(0).getUuid());
         assertThat(servicio.obtenerPerfil(p.getUuid()).zona()).isEqualTo("Centro, Santa Fe");
     }
