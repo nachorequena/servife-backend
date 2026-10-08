@@ -1,5 +1,6 @@
 package ar.edu.iessf.servife.catalogo.controller;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
@@ -12,23 +13,32 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import ar.edu.iessf.servife.catalogo.dto.TipoServicioResponse;
+import ar.edu.iessf.servife.catalogo.service.TipoServicioService;
 import ar.edu.iessf.servife.common.error.NoImplementadoException;
 
 /**
  * Módulo B — Catálogo y búsqueda (dueño: Juan Pablo Saravia).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * Cada método es un stub que responde 501 hasta que se implemente: definí los DTOs en dto/,
+ * B1 (listar tipos de servicio) está implementado y es público. B2 a B4 son stubs que responden 501
+ * hasta que se implementen: definí los DTOs en dto/,
  * la lógica en service/ y reemplazá el throw.
  */
 @RestController
 @RequestMapping("/tipos-servicio")
 public class TipoServicioController {
 
-    /** B1 · GET /tipos-servicio · CU04, CU13 · Tipos de servicio activos con su ícono. */
-    @PreAuthorize("isAuthenticated()")
+    private final TipoServicioService servicio;
+
+    public TipoServicioController(TipoServicioService servicio) {
+        this.servicio = servicio;
+    }
+
+    /** B1 · GET /tipos-servicio · CU04, CU13 · Tipos de servicio activos con su ícono. Público: lo usa el registro del prestador. */
+    @PreAuthorize("permitAll()")
     @GetMapping
-    public ResponseEntity<Void> listar() {
-        throw new NoImplementadoException("B1");
+    public List<TipoServicioResponse> listar() {
+        return servicio.listarActivos();
     }
 
     /** B2 · POST /tipos-servicio · CU13 · Incluye requiereMatricula (D01). 201 con Location. */

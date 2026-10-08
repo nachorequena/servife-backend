@@ -29,7 +29,8 @@ public class ManejadorGlobalDeErrores {
 
     @ExceptionHandler(NegocioException.class)
     public ResponseEntity<ErrorRespuesta> negocio(NegocioException e, HttpServletRequest request) {
-        return responder(e.getStatus(), e.getCodigo(), e.getMessage(), request);
+        return ResponseEntity.status(e.getStatus()).body(ErrorRespuesta.de(e.getStatus().value(), e.getCodigo(),
+            e.getMessage(), request.getRequestURI(), e.getErrores()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -39,6 +40,15 @@ public class ManejadorGlobalDeErrores {
             .toList();
         ErrorRespuesta cuerpo = ErrorRespuesta.de(HttpStatus.BAD_REQUEST.value(), "VALIDACION",
             "Hay campos con errores.", request.getRequestURI(), errores);
+        return ResponseEntity.badRequest().body(cuerpo);
+    }
+
+    /** Regla de validación que depende de la base u otro campo: mismo formato que Bean Validation. */
+    @ExceptionHandler(ValidacionException.class)
+    public ResponseEntity<ErrorRespuesta> validacionDeNegocio(ValidacionException e, HttpServletRequest request) {
+        ErrorRespuesta cuerpo = ErrorRespuesta.de(HttpStatus.BAD_REQUEST.value(), "VALIDACION",
+            "Hay campos con errores.", request.getRequestURI(),
+            List.of(new ErrorCampo(e.getCampo(), e.getDetalle())));
         return ResponseEntity.badRequest().body(cuerpo);
     }
 

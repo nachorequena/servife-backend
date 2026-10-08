@@ -26,7 +26,8 @@ import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 public class SeguridadConfig {
 
     private static final String[] PUBLICOS = {
-        "/auth/registro", "/auth/login", "/auth/refresh", "/auth/recuperar"
+        "/auth/registro", "/auth/login", "/auth/refresh", "/auth/recuperar",
+        "/auth/recuperar/confirmar"
     };
 
     private static final String[] DOCUMENTACION = {
@@ -42,6 +43,7 @@ public class SeguridadConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, PUBLICOS).permitAll()
+                .requestMatchers(HttpMethod.GET, "/tipos-servicio").permitAll()
                 .requestMatchers(DOCUMENTACION).permitAll()
                 .requestMatchers("/admin/**").hasRole("GESTOR")
                 .anyRequest().authenticated())

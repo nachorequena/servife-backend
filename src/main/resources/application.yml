@@ -17,8 +17,21 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  mail:
+    properties:
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USUARIO:}
+    password: ${MAIL_CONTRASENIA:}
   jackson:
     time-zone: UTC
+  # Mensajes de Bean Validation siempre en español, sin depender del Accept-Language del cliente.
+  web:
+    locale: es
+    locale-resolver: fixed
   # TODO: tamaño máximo de archivo sin definir (.ai/07-security.md). Hasta entonces, el default de Spring.
   # servlet:
   #   multipart:
@@ -34,6 +47,13 @@ servife:
     secreto: ${JWT_SECRETO}
     duracion-access: 15m
     duracion-refresh: 7d
+  correo:
+    remitente: ${MAIL_REMITENTE:no-responder@servife.local}
+  # Primer gestor: solo se crea si no hay ninguno. Vacío = no hace nada.
+  gestor-inicial:
+    email: ${GESTOR_INICIAL_EMAIL:}
+    contrasenia: ${GESTOR_INICIAL_CONTRASENIA:}
+    nombre: ${GESTOR_INICIAL_NOMBRE:}
   cors:
     origenes-permitidos: ${CORS_ORIGENES:http://localhost:8081}
 
