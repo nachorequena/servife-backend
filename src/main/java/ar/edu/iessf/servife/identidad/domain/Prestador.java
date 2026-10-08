@@ -81,6 +81,11 @@ public class Prestador extends EntidadBase implements Cuenta {
     @Column(name = "valoracion_promedio", precision = 2, scale = 1, insertable = false, updatable = false)
     private BigDecimal valoracionPromedio;
 
+    @Override
+    public Long getId() {
+        return id;
+    }
+
     protected Prestador() {
     }
 

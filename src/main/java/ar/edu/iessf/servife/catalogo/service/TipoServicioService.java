@@ -130,7 +130,9 @@ public class TipoServicioService {
     /** Dos altas simultáneas con el mismo nombre: gana la primera. Cualquier otra violación es un bug. */
     private static RuntimeException traducir(DataIntegrityViolationException e) {
         for (Throwable causa = e; causa != null; causa = causa.getCause()) {
-            if (causa instanceof ConstraintViolationException v && "tipos_servicio_nombre_key".equals(v.getConstraintName())) {
+            if (causa instanceof ConstraintViolationException v
+                    && ("tipos_servicio_nombre_key".equals(v.getConstraintName())
+                        || "uq_tipos_servicio_nombre_lower".equals(v.getConstraintName()))) {
                 return duplicado();
             }
         }
