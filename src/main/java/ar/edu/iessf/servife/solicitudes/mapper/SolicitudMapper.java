@@ -1,5 +1,6 @@
 package ar.edu.iessf.servife.solicitudes.mapper;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -8,6 +9,7 @@ import ar.edu.iessf.servife.catalogo.domain.TipoServicio;
 import ar.edu.iessf.servife.catalogo.dto.TipoServicioResponse;
 import ar.edu.iessf.servife.common.seguridad.Rol;
 import ar.edu.iessf.servife.identidad.domain.Cuenta;
+import ar.edu.iessf.servife.solicitudes.domain.AccionSobreSolicitud;
 import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
 import ar.edu.iessf.servife.solicitudes.domain.MaquinaDeEstados;
 import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
@@ -27,8 +29,9 @@ public final class SolicitudMapper {
     /**
      * @param imagenIds uuid de los archivos adjuntos
      * @param rolActual rol del usuario que consulta, para calcular las acciones disponibles
+     * @param hoy el día de hoy en Argentina: antes de la fecha deseada no se ofrece INICIAR (C4 contestaría 409)
      */
-    public static SolicitudResponse aRespuesta(Solicitud s, List<UUID> imagenIds, Rol rolActual) {
+    public static SolicitudResponse aRespuesta(Solicitud s, List<UUID> imagenIds, Rol rolActual, LocalDate hoy) {
         boolean conTelefono = CON_TELEFONO.contains(s.getEstado());
         TipoServicio t = s.getTipoServicio();
         return new SolicitudResponse(s.getUuid(), s.getEstado(),
@@ -39,7 +42,14 @@ public final class SolicitudMapper {
             s.getPrecioAcordado(), s.getMotivo(),
             s.getCanceladaPor() == null ? null : s.getCanceladaPor().name(),
             s.getCreadoEn(), s.getActualizadoEn(),
-            MaquinaDeEstados.accionesDisponibles(s.getEstado(), rolActual));
+            accionesDisponibles(s, rolActual, hoy));
+    }
+
+    private static List<AccionSobreSolicitud> accionesDisponibles(Solicitud s, Rol rolActual, LocalDate hoy) {
+        boolean antesDeLaFecha = s.getFechaDeseada() != null && hoy.isBefore(s.getFechaDeseada());
+        return MaquinaDeEstados.accionesDisponibles(s.getEstado(), rolActual).stream()
+            .filter(a -> !(a == AccionSobreSolicitud.INICIAR && antesDeLaFecha))
+            .toList();
     }
 
     /** La otra parte de la solicitud, vista desde rolActual (el cliente ve al prestador y viceversa). */

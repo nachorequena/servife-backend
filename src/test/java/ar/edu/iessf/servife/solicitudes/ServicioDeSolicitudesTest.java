@@ -187,6 +187,23 @@ class ServicioDeSolicitudesTest {
     }
 
     @Test
+    void lasImagenesSalenEnElMismoOrdenQueEnElDetalleSinImportarElOrdenEnviado() throws Exception {
+        UUID i1 = subir(ana);
+        UUID i2 = subir(ana);
+
+        String creada = crear(ana, cuerpo(beto.getUuid(), "2026-10-09", List.of(i2, i1)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.imagenIds[0]").value(i1.toString()))
+            .andExpect(jsonPath("$.imagenIds[1]").value(i2.toString()))
+            .andReturn().getResponse().getContentAsString();
+
+        String uuid = json.readTree(creada).get("uuid").asText();
+        mvc.perform(get(API + "/solicitudes/" + uuid).contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
+            .andExpect(jsonPath("$.imagenIds[0]").value(i1.toString()))
+            .andExpect(jsonPath("$.imagenIds[1]").value(i2.toString()));
+    }
+
+    @Test
     void sinImagenesTambienFunciona() throws Exception {
         crear(ana, Map.of("uuidPrestador", beto.getUuid(), "fechaDeseada", "2026-10-09",
             "direccion", "Calle 1", "descripcion", "Algo", "horaPreferida", "   "))

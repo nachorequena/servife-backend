@@ -3,8 +3,10 @@ package ar.edu.iessf.servife.solicitudes;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -263,6 +265,28 @@ class CambioDeEstadoTest {
             .containsEntry("cuerpo", "Beto Gas inició la solicitud del 09/10/2026.");
         assertThat(avisos.get(1)).containsEntry("tipo", "SOLICITUD_FINALIZADA").containsEntry("titulo", "Terminó el trabajo")
             .containsEntry("cuerpo", "Beto Gas finalizó la solicitud del 09/10/2026.");
+    }
+
+    @Test
+    void iniciarNoSeOfreceAntesDeLaFechaYSiElDiaDeLaFecha() throws Exception {
+        Solicitud futura = solicitud(EstadoSolicitud.ACEPTADA, LocalDate.of(2026, 10, 10));
+        mvc.perform(get(API + "/solicitudes/" + futura.getUuid()).contextPath(API).with(comoBeto()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accionesDisponibles", not(hasItem("INICIAR"))))
+            .andExpect(jsonPath("$.accionesDisponibles", hasItem("CANCELAR")));
+
+        // 00:30 en Argentina del 9/10 (03:30 UTC): hoy ya es el 9
+        Solicitud deHoy = solicitud(EstadoSolicitud.ACEPTADA, LocalDate.of(2026, 10, 9));
+        mvc.perform(get(API + "/solicitudes/" + deHoy.getUuid()).contextPath(API).with(comoBeto()))
+            .andExpect(jsonPath("$.accionesDisponibles", hasItems("INICIAR", "CANCELAR")));
+    }
+
+    @Test
+    void aceptarUnaSolicitudDeFechaFuturaNoOfreceIniciar() throws Exception {
+        Solicitud futura = solicitud(EstadoSolicitud.PENDIENTE, LocalDate.of(2026, 10, 10));
+        patchear(futura, comoBeto(), "{\"accion\":\"ACEPTAR\"}")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accionesDisponibles", not(hasItem("INICIAR"))));
     }
 
     @Test

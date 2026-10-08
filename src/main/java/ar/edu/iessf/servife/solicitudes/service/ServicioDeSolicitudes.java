@@ -90,7 +90,7 @@ public class ServicioDeSolicitudes {
                 && p.getEstadoCuenta() == EstadoCuenta.ACTIVA)
             .orElseThrow(() -> new ValidacionException("uuidPrestador", "no está disponible"));
 
-        LocalDate hoy = LocalDate.now(clock.withZone(ARGENTINA));
+        LocalDate hoy = hoyEnArgentina();
         if (pedido.fechaDeseada().isBefore(hoy)) {
             throw new ValidacionException("fechaDeseada", "tiene que ser hoy o una fecha futura");
         }
@@ -117,7 +117,12 @@ public class ServicioDeSolicitudes {
                 + pedido.fechaDeseada().format(DIA_MES_ANIO) + ".",
             solicitud.getUuid());
 
-        return SolicitudMapper.aRespuesta(solicitud, pedidas, Rol.CLIENTE);
+        // mismo orden que C3 (por id_archivo), no el del pedido
+        return SolicitudMapper.aRespuesta(solicitud, solicitudes.uuidsDeImagenes(solicitud.getId()), Rol.CLIENTE, hoy);
+    }
+
+    private LocalDate hoyEnArgentina() {
+        return LocalDate.now(clock.withZone(ARGENTINA));
     }
 
     /**
@@ -140,7 +145,7 @@ public class ServicioDeSolicitudes {
     public SolicitudResponse obtener(UUID uuid) {
         Rol rol = usuarioActual.rol();
         Solicitud s = parteDe(uuid, rol);
-        return SolicitudMapper.aRespuesta(s, solicitudes.uuidsDeImagenes(s.getId()), rol);
+        return SolicitudMapper.aRespuesta(s, solicitudes.uuidsDeImagenes(s.getId()), rol, hoyEnArgentina());
     }
 
     /**
@@ -157,7 +162,7 @@ public class ServicioDeSolicitudes {
         EstadoSolicitud destino = MaquinaDeEstados.destino(origen, accion, rol);
 
         if (accion == AccionSobreSolicitud.INICIAR && s.getFechaDeseada() != null
-                && LocalDate.now(clock.withZone(ARGENTINA)).isBefore(s.getFechaDeseada())) {
+                && hoyEnArgentina().isBefore(s.getFechaDeseada())) {
             throw new ConflictoException("TODAVIA_NO_ES_LA_FECHA", "Todavía no llegó la fecha del trabajo.");
         }
         if (pedido.precioAcordado() != null && accion != AccionSobreSolicitud.ACEPTAR) {
@@ -178,7 +183,7 @@ public class ServicioDeSolicitudes {
         // el UPDATE limpió el contexto: se recarga para responder y para avisar con los datos vigentes
         Solicitud actual = solicitudes.findDetalleByUuidAndEliminadoEnIsNull(uuid).orElseThrow();
         avisarCambio(actual, destino, rol);
-        return SolicitudMapper.aRespuesta(actual, solicitudes.uuidsDeImagenes(actual.getId()), rol);
+        return SolicitudMapper.aRespuesta(actual, solicitudes.uuidsDeImagenes(actual.getId()), rol, hoyEnArgentina());
     }
 
     /** Aviso a la otra parte: quién actuó, qué hizo, y motivo o precio si hay. */
