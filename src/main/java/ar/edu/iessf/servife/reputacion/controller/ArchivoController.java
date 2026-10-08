@@ -2,7 +2,6 @@ package ar.edu.iessf.servife.reputacion.controller;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.URI;
 import java.time.Duration;
 import java.util.UUID;
 
@@ -17,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.reputacion.dto.ArchivoResponse;
@@ -51,7 +51,9 @@ public class ArchivoController {
             throw new UncheckedIOException(e);
         }
         ArchivoResponse creado = servicio.subir(usuario.uuid(), usuario.rol(), datos);
-        return ResponseEntity.created(URI.create("/archivos/" + creado.uuid())).body(creado);
+        return ResponseEntity.created(
+            ServletUriComponentsBuilder.fromCurrentRequest().path("/{uuid}").buildAndExpand(creado.uuid()).toUri())
+            .body(creado);
     }
 
     /** GET /archivos/{uuid} · Bytes de la imagen. Solo el dueño o un participante de una solicitud que la incluye; si no, 404. */

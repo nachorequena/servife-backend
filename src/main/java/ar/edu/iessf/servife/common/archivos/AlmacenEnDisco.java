@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
@@ -33,10 +34,28 @@ public class AlmacenEnDisco implements AlmacenDeArchivos {
     @Override
     public void guardar(String nombre, InputStream datos) {
         Path destino = resolver(nombre);
+        Path temporal = destino.resolveSibling(nombre + ".tmp");
         try {
-            Files.copy(datos, destino, StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(datos, temporal, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temporal, destino, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException | RuntimeException e) {
+            borrarSilencioso(temporal);
+            borrarSilencioso(destino);
+            throw e instanceof IOException io ? new UncheckedIOException("No se pudo guardar el archivo " + nombre, io)
+                : (RuntimeException) e;
+        }
+    }
+
+    @Override
+    public void borrar(String nombre) {
+        borrarSilencioso(resolver(nombre));
+    }
+
+    private static void borrarSilencioso(Path ruta) {
+        try {
+            Files.deleteIfExists(ruta);
         } catch (IOException e) {
-            throw new UncheckedIOException("No se pudo guardar el archivo " + nombre, e);
+            // best effort: un resto en disco no debe tapar el error original
         }
     }
 
@@ -44,6 +63,8 @@ public class AlmacenEnDisco implements AlmacenDeArchivos {
     public InputStream leer(String nombre) {
         try {
             return Files.newInputStream(resolver(nombre));
+        } catch (NoSuchFileException e) {
+            throw new ArchivoFaltanteException(nombre, e);
         } catch (IOException e) {
             throw new UncheckedIOException("No se pudo leer el archivo " + nombre, e);
         }

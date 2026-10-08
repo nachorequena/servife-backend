@@ -6,7 +6,12 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import ar.edu.iessf.servife.common.archivos.ArchivoFaltanteException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +33,8 @@ import ar.edu.iessf.servife.reputacion.repository.ArchivoRepository;
  */
 @Service
 public class ServicioDeArchivos {
+
+    private static final Logger log = LoggerFactory.getLogger(ServicioDeArchivos.class);
 
     static final long MAXIMO_BYTES = 5L * 1024 * 1024;
 
@@ -59,7 +66,17 @@ public class ServicioDeArchivos {
 
         // Si escribir en disco falla, la excepción revierte la fila: no queda un registro sin bytes.
         Archivo archivo = archivos.saveAndFlush(new Archivo(mime, datos.length, duenio.getId(), rol));
-        almacen.guardar(archivo.getRuta(), new ByteArrayInputStream(datos));
+        String nombre = archivo.getRuta();
+        almacen.guardar(nombre, new ByteArrayInputStream(datos));
+        // Si la transacción termina en rollback (p. ej. falla el commit), no quedan bytes huérfanos.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int estado) {
+                if (estado == STATUS_ROLLED_BACK) {
+                    almacen.borrar(nombre);
+                }
+            }
+        });
         return new ArchivoResponse(archivo.getUuid(), mime, datos.length);
     }
 
@@ -73,6 +90,9 @@ public class ServicioDeArchivos {
         }
         try (InputStream entrada = almacen.leer(archivo.getRuta())) {
             return new ArchivoLeido(archivo.getMime(), entrada.readAllBytes());
+        } catch (ArchivoFaltanteException e) {
+            log.warn("El archivo {} existe en la base pero no en el almacén", archivoUuid);
+            throw noEncontrado();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

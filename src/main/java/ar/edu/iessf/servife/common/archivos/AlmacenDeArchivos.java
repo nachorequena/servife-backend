@@ -11,6 +11,9 @@ public interface AlmacenDeArchivos {
     /** Guarda los datos bajo ese nombre. Lanza IllegalArgumentException si no es un uuid. */
     void guardar(String nombre, InputStream datos);
 
-    /** Abre los datos guardados; el que llama cierra el stream. */
+    /** Borra el archivo si existe (limpieza ante fallos o rollback). */
+    void borrar(String nombre);
+
+    /** Abre los datos guardados (el que llama cierra el stream). Lanza ArchivoFaltanteException si no están. */
     InputStream leer(String nombre);
 }

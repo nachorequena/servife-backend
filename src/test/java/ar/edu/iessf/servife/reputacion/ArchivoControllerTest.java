@@ -4,12 +4,14 @@ import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -104,7 +106,7 @@ class ArchivoControllerTest {
                 .file(new MockMultipartFile("archivo", "f.png", "image/png", PNG))
                 .contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
             .andExpect(status().isCreated())
-            .andExpect(header().string("Location", matchesPattern(".*/archivos/[0-9a-f-]{36}")))
+            .andExpect(header().string("Location", matchesPattern("http://localhost/api/v1/archivos/[0-9a-f-]{36}")))
             .andExpect(jsonPath("$.uuid").exists())
             .andExpect(jsonPath("$.mime").value("image/png"))
             .andExpect(jsonPath("$.bytes").value(PNG.length));
@@ -170,5 +172,80 @@ class ArchivoControllerTest {
         mvc.perform(get(API + "/archivos/" + archivo).contextPath(API).with(como(beto.getUuid(), "PRESTADOR")))
             .andExpect(status().isOk())
             .andExpect(content().bytes(PNG));
+    }
+
+    @Test
+    void sinLaParteArchivoEs400ConCampo() throws Exception {
+        Cliente ana = cliente();
+        mvc.perform(multipart(API + "/archivos").file(new MockMultipartFile("otra", "f.png", "image/png", PNG))
+                .contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.codigo").value("VALIDACION"))
+            .andExpect(jsonPath("$.errores[0].campo").value("archivo"))
+            .andExpect(jsonPath("$.errores[0].detalle").value("es obligatorio"));
+    }
+
+    @Test
+    void cuerpoQueNoEsMultipartEs415() throws Exception {
+        Cliente ana = cliente();
+        mvc.perform(post(API + "/archivos").contentType("application/json").content("{}")
+                .contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
+            .andExpect(status().isUnsupportedMediaType())
+            .andExpect(jsonPath("$.codigo").value("TIPO_DE_CONTENIDO_NO_SOPORTADO"));
+    }
+
+    @Test
+    void multipartMalFormadoEs400() throws Exception {
+        Cliente ana = cliente();
+        mvc.perform(post(API + "/archivos").contentType("multipart/form-data").content("basura")
+                .contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void prestadorConElMismoIdNumericoQueElDuenioClienteEs404() throws Exception {
+        TipoServicio tipo = tiposServicio.findByEliminadoEnIsNullOrderByNombre().get(0);
+        Prestador beto = prestadores.save(new Prestador("Beto", UUID.randomUUID() + "@mail.com", "hash", tipo));
+        UUID archivo = insertarArchivo(beto.getId(), "CLIENTE");
+
+        mvc.perform(get(API + "/archivos/" + archivo).contextPath(API).with(como(beto.getUuid(), "PRESTADOR")))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void elClienteLeeLaImagenQueSubioElPrestadorDeSuSolicitud() throws Exception {
+        Cliente ana = cliente();
+        TipoServicio tipo = tiposServicio.findByEliminadoEnIsNullOrderByNombre().get(0);
+        Prestador beto = prestadores.save(new Prestador("Beto", UUID.randomUUID() + "@mail.com", "hash", tipo));
+        UUID archivo = insertarArchivo(beto.getId(), "PRESTADOR");
+        mvc.perform(get(API + "/archivos/" + archivo).contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
+            .andExpect(status().isNotFound());
+
+        Solicitud s = solicitudes.save(new Solicitud(ana, beto, tipo, "Pérdida", LocalDate.of(2026, 10, 20), null, null));
+        jdbc.update("INSERT INTO solicitud_imagenes (id_solicitud, id_archivo) SELECT ?, id_archivo FROM archivos WHERE uuid = ?",
+            s.getId(), archivo);
+
+        mvc.perform(get(API + "/archivos/" + archivo).contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
+            .andExpect(status().isOk())
+            .andExpect(content().bytes(PNG));
+    }
+
+    @Test
+    void archivoSinBytesEnDiscoEs404() throws Exception {
+        Cliente ana = cliente();
+        UUID archivo = subir(ana, PNG);
+        Files.delete(directorio.resolve(archivo.toString()));
+
+        mvc.perform(get(API + "/archivos/" + archivo).contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
+            .andExpect(status().isNotFound());
+    }
+
+    /** Inserta la fila y escribe los bytes en disco; el dueño se fija directo para controlar su id numérico. */
+    private UUID insertarArchivo(Long idPropietario, String rol) throws Exception {
+        UUID uuid = UUID.randomUUID();
+        jdbc.update("INSERT INTO archivos (uuid, ruta, mime, bytes, id_propietario, rol_propietario) VALUES (?, ?, 'image/png', ?, ?, ?)",
+            uuid, uuid.toString(), PNG.length, idPropietario, rol);
+        Files.write(directorio.resolve(uuid.toString()), PNG);
+        return uuid;
     }
 }

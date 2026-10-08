@@ -38,6 +38,10 @@ spring:
       max-request-size: 6MB
 
 server:
+  tomcat:
+    # Con una subida mayor al límite multipart, Tomcat debe drenar el cuerpo (por defecto corta a 2 MB y
+    # resetea la conexión): así el cliente recibe el JSON 413 en vez de un error de red.
+    max-swallow-size: 20MB
   servlet:
     context-path: /api/v1
 
