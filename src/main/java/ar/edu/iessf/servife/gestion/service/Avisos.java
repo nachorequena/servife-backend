@@ -36,6 +36,12 @@ public class Avisos {
     /** Crea un aviso no leído para el destinatario, en la transacción actual. El título se recorta a 120. */
     @Transactional
     public void avisar(Cuenta destinatario, TipoDeAviso tipo, String titulo, String cuerpo, UUID uuidSolicitud) {
+        if (titulo == null) {
+            throw new IllegalArgumentException("El título del aviso es obligatorio.");
+        }
+        if (destinatario.getId() == null) {
+            throw new IllegalStateException("El destinatario del aviso todavía no está guardado.");
+        }
         String tituloAjustado = titulo.length() > LARGO_MAXIMO_TITULO ? titulo.substring(0, LARGO_MAXIMO_TITULO) : titulo;
         repositorio.save(new Aviso(destinatario.getId(), destinatario.getRol().name(), tipo.name(),
             tituloAjustado, cuerpo, uuidSolicitud));

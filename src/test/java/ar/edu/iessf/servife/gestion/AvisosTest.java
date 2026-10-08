@@ -24,7 +24,12 @@ import ar.edu.iessf.servife.common.seguridad.Rol;
 import ar.edu.iessf.servife.gestion.dto.AvisoResponse;
 import ar.edu.iessf.servife.gestion.service.Avisos;
 import ar.edu.iessf.servife.gestion.service.TipoDeAviso;
+import ar.edu.iessf.servife.catalogo.repository.TipoServicioRepository;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
+import ar.edu.iessf.servife.identidad.domain.Cuenta;
+import ar.edu.iessf.servife.identidad.domain.Prestador;
+import ar.edu.iessf.servife.identidad.service.Cuentas;
+import jakarta.persistence.EntityManager;
 import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
 
 /** Avisos dentro de la app contra PostgreSQL real (migración V4 incluida). */
@@ -39,7 +44,11 @@ class AvisosTest {
 
     @Autowired private Avisos avisos;
     @Autowired private ClienteRepository clientes;
+    @Autowired private ar.edu.iessf.servife.identidad.repository.PrestadorRepository prestadores;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private TipoServicioRepository tipos;
+    @Autowired private Cuentas cuentas;
+    @Autowired private EntityManager em;
 
     private Cliente cliente(String nombre, String email) {
         return clientes.saveAndFlush(new Cliente(nombre, email, "hash"));
@@ -111,6 +120,36 @@ class AvisosTest {
         assertThatThrownBy(() -> avisos.marcarLeido(ana.getUuid(), Rol.CLIENTE, UUID.randomUUID()))
             .isInstanceOf(RecursoNoEncontradoException.class);
         assertThat(avisos.contarNoLeidos(beto.getUuid(), Rol.CLIENTE)).isEqualTo(1);
+    }
+
+    @Test
+    void clienteYPrestadorConElMismoIdInternoSoloVenSusAvisos() {
+        Prestador pedro = prestadores.saveAndFlush(new Prestador("Pedro", "pedro@mail.com", "hash", tipos.findAll().get(0)));
+        UUID anaUuid = UUID.randomUUID();
+        jdbc.update("INSERT INTO clientes (id_cliente, uuid, nombre_apellido, email, contrasenia) OVERRIDING SYSTEM VALUE VALUES (?, ?, 'Ana', 'ana@mail.com', 'h')",
+            pedro.getId(), anaUuid);
+        em.clear();
+        Cuenta anaConIdIgual = cuentas.buscarPorUuid(anaUuid, Rol.CLIENTE).orElseThrow();
+        assertThat(anaConIdIgual.getId()).isEqualTo(pedro.getId());
+
+        avisos.avisar(anaConIdIgual, TipoDeAviso.SOLICITUD_NUEVA, "Para Ana", null, null);
+        avisos.avisar(cuentas.buscarPorUuid(pedro.getUuid(), Rol.PRESTADOR).orElseThrow(),
+            TipoDeAviso.SOLICITUD_NUEVA, "Para Pedro", null, null);
+
+        assertThat(avisos.listar(anaUuid, Rol.CLIENTE, PageRequest.of(0, 20)).contenido())
+            .extracting(AvisoResponse::titulo).containsExactly("Para Ana");
+        assertThat(avisos.listar(pedro.getUuid(), Rol.PRESTADOR, PageRequest.of(0, 20)).contenido())
+            .extracting(AvisoResponse::titulo).containsExactly("Para Pedro");
+        assertThat(avisos.contarNoLeidos(anaUuid, Rol.CLIENTE)).isEqualTo(1);
+    }
+
+    @Test
+    void avisarSinTituloOSinDestinatarioGuardadoFalla() {
+        Cliente ana = cliente("Ana", "ana@mail.com");
+        assertThatThrownBy(() -> avisos.avisar(ana, TipoDeAviso.PERFIL_APROBADO, null, null, null))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> avisos.avisar(new Cliente("X", "x@mail.com", "h"), TipoDeAviso.PERFIL_APROBADO, "t", null, null))
+            .isInstanceOf(IllegalStateException.class);
     }
 
     @Test

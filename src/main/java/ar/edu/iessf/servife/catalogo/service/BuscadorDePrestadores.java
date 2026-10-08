@@ -2,6 +2,8 @@ package ar.edu.iessf.servife.catalogo.service;
 
 import java.util.List;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,13 +13,12 @@ import ar.edu.iessf.servife.catalogo.repository.BusquedaDePrestadoresRepository;
 import ar.edu.iessf.servife.catalogo.repository.BusquedaDePrestadoresRepository.Criterios;
 import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.common.paginacion.Pagina;
+import ar.edu.iessf.servife.common.paginacion.Paginacion;
 
 /** B5 · CU04: valida y normaliza los filtros y delega la consulta. */
 @Service
 public class BuscadorDePrestadores {
 
-    static final int TAMANIO_POR_DEFECTO = 20;
-    static final int TAMANIO_MAXIMO = 50;
     private static final int LARGO_MINIMO_Q = 2;
 
     private final BusquedaDePrestadoresRepository repositorio;
@@ -48,14 +49,7 @@ public class BuscadorDePrestadores {
         if (dias.stream().anyMatch(d -> d == null || d < 1 || d > 7)) {
             throw new ValidacionException("dias", "Cada día debe estar entre 1 (lunes) y 7 (domingo).");
         }
-        int size = f.size() == null ? TAMANIO_POR_DEFECTO : f.size();
-        if (size < 1 || size > TAMANIO_MAXIMO) {
-            throw new ValidacionException("size", "El tamaño de página debe estar entre 1 y " + TAMANIO_MAXIMO + ".");
-        }
-        int page = f.page() == null ? 0 : f.page();
-        if (page < 0) {
-            throw new ValidacionException("page", "La página no puede ser negativa.");
-        }
+        Pageable pagina = Paginacion.pedir(f.page(), f.size(), Sort.unsorted());
         String q = f.q() == null ? null : f.q().trim();
         if (q != null && q.length() < LARGO_MINIMO_Q) {
             q = null;
@@ -64,6 +58,6 @@ public class BuscadorDePrestadores {
         boolean porCercania = f.lat() != null && !"valoracion".equals(orden);
 
         return repositorio.buscar(new Criterios(q, f.tipoServicioId(), f.lat(), f.lng(), f.puntajeMin(), dias,
-            porCercania, page, size));
+            porCercania, pagina.getPageNumber(), pagina.getPageSize()));
     }
 }

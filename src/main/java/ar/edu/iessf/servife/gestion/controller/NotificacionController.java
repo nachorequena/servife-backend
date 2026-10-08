@@ -2,7 +2,8 @@ package ar.edu.iessf.servife.gestion.controller;
 
 import java.util.UUID;
 
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import ar.edu.iessf.servife.common.paginacion.Pagina;
+import ar.edu.iessf.servife.common.paginacion.Paginacion;
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.gestion.dto.AvisoResponse;
 import ar.edu.iessf.servife.gestion.dto.ContadorDeAvisosResponse;
@@ -28,9 +30,6 @@ import ar.edu.iessf.servife.gestion.service.Avisos;
 @RequestMapping("/notificaciones")
 public class NotificacionController {
 
-    private static final int TAMANIO_POR_DEFECTO = 20;
-    private static final int TAMANIO_MAXIMO = 50;
-
     private final Avisos avisos;
     private final UsuarioActual usuarioActual;
 
@@ -42,9 +41,9 @@ public class NotificacionController {
     /** E11 · GET /notificaciones · Historial de avisos del usuario, los más nuevos primero. */
     @PreAuthorize("isAuthenticated()")
     @GetMapping
-    public Pagina<AvisoResponse> listar(@RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "" + TAMANIO_POR_DEFECTO) int size) {
-        PageRequest pagina = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), TAMANIO_MAXIMO));
+    public Pagina<AvisoResponse> listar(@RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        Pageable pagina = Paginacion.pedir(page, size, Sort.unsorted());
         return avisos.listar(usuarioActual.uuid(), usuarioActual.rol(), pagina);
     }
 

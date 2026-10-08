@@ -86,11 +86,21 @@ class NotificacionControllerTest {
     }
 
     @Test
-    void listarTopeaElTamanioEn50() throws Exception {
+    void listarRechazaPaginasYTamaniosInvalidos() throws Exception {
+        mvc.perform(get(RUTA + "?size=500").contextPath(CONTEXTO).with(como("CLIENTE")))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get(RUTA + "?size=0").contextPath(CONTEXTO).with(como("CLIENTE")))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get(RUTA + "?page=-1").contextPath(CONTEXTO).with(como("CLIENTE")))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void listarAceptaElMaximoDe50() throws Exception {
         when(avisos.listar(YO, Rol.CLIENTE, PageRequest.of(2, 50)))
             .thenReturn(new Pagina<>(List.of(), 2, 50, 0, 0));
 
-        mvc.perform(get(RUTA + "?page=2&size=500").contextPath(CONTEXTO).with(como("CLIENTE")))
+        mvc.perform(get(RUTA + "?page=2&size=50").contextPath(CONTEXTO).with(como("CLIENTE")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.tamanio").value(50));
     }
