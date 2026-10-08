@@ -1,4 +1,4 @@
-package ar.edu.iessf.servife.solicitudes.service;
+package ar.edu.iessf.servife.common.formato;
 
 import java.math.BigDecimal;
 import java.text.DecimalFormat;

@@ -1,10 +1,9 @@
-package ar.edu.iessf.servife.solicitudes;
+package ar.edu.iessf.servife.common.formato;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-import ar.edu.iessf.servife.solicitudes.service.Dinero;
 
 class DineroTest {
 

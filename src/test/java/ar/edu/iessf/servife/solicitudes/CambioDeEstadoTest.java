@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -37,11 +39,15 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import ar.edu.iessf.servife.catalogo.domain.TipoServicio;
 import ar.edu.iessf.servife.catalogo.repository.TipoServicioRepository;
@@ -211,13 +217,32 @@ class CambioDeEstadoTest {
     }
 
     @Test
+    void elClienteCancelaUnaPendienteConMotivoYAvisaSoloAlPrestador() throws Exception {
+        Solicitud s = solicitud(EstadoSolicitud.PENDIENTE);
+
+        patchear(s, comoAna(), "{\"accion\":\"CANCELAR\",\"motivo\":\"Cambié de planes\"}")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("CANCELADA"))
+            .andExpect(jsonPath("$.canceladaPor").value("CLIENTE"))
+            .andExpect(jsonPath("$.motivo").value("Cambié de planes"));
+
+        assertThat(avisosDe("PRESTADOR", beto.getId())).singleElement().satisfies(a ->
+            assertThat(a).containsEntry("tipo", "SOLICITUD_CANCELADA").containsEntry("titulo", "Cancelaron la solicitud")
+                .containsEntry("cuerpo", "Ana Pérez canceló la solicitud del 09/10/2026. Motivo: Cambié de planes")
+                .containsEntry("uuid_solicitud", s.getUuid()));
+        assertThat(avisosDe("CLIENTE", ana.getId())).isEmpty();
+    }
+
+    @Test
     void elPrestadorCancelaUnaAceptadaYAvisaAlCliente() throws Exception {
         Solicitud s = solicitud(EstadoSolicitud.ACEPTADA);
         patchear(s, comoBeto(), "{\"accion\":\"CANCELAR\"}")
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.canceladaPor").value("PRESTADOR"));
         assertThat(avisosDe("CLIENTE", ana.getId())).singleElement()
-            .satisfies(a -> assertThat(a).containsEntry("tipo", "SOLICITUD_CANCELADA"));
+            .satisfies(a -> assertThat(a).containsEntry("tipo", "SOLICITUD_CANCELADA")
+                .containsEntry("titulo", "Cancelaron la solicitud")
+                .containsEntry("cuerpo", "Beto Gas canceló la solicitud del 09/10/2026."));
     }
 
     @Test
@@ -325,15 +350,18 @@ class CambioDeEstadoTest {
         try (Connection candado = dataSource.getConnection()) {
             // Una transacción aparte retiene la fila: las dos peticiones leen PENDIENTE y quedan esperando en el UPDATE.
             candado.setAutoCommit(false);
-            candado.createStatement().executeUpdate("UPDATE solicitudes_servicio SET descripcion = descripcion "
-                + "WHERE uuid = '" + s.getUuid() + "'");
+            try (PreparedStatement ps = candado.prepareStatement(
+                    "UPDATE solicitudes_servicio SET descripcion = descripcion WHERE uuid = ?")) {
+                ps.setObject(1, s.getUuid());
+                ps.executeUpdate();
+            }
 
-            Callable<Integer> aceptar = () -> patchear(s, comoBeto(), "{\"accion\":\"ACEPTAR\"}")
-                .andReturn().getResponse().getStatus();
-            Callable<Integer> cancelar = () -> patchear(s, comoAna(), "{\"accion\":\"CANCELAR\"}")
-                .andReturn().getResponse().getStatus();
-            Future<Integer> a = pool.submit(aceptar);
-            Future<Integer> c = pool.submit(cancelar);
+            Callable<MockHttpServletResponse> aceptar = () -> patchear(s, comoBeto(), "{\"accion\":\"ACEPTAR\"}")
+                .andReturn().getResponse();
+            Callable<MockHttpServletResponse> cancelar = () -> patchear(s, comoAna(), "{\"accion\":\"CANCELAR\"}")
+                .andReturn().getResponse();
+            Future<MockHttpServletResponse> a = pool.submit(aceptar);
+            Future<MockHttpServletResponse> c = pool.submit(cancelar);
 
             long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
             while (jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' "
@@ -343,15 +371,25 @@ class CambioDeEstadoTest {
             }
             candado.commit();
 
-            List<Integer> codigos = List.of(a.get(20, TimeUnit.SECONDS), c.get(20, TimeUnit.SECONDS));
-            assertThat(codigos).containsExactlyInAnyOrder(200, 409);
+            MockHttpServletResponse respAceptar = a.get(20, TimeUnit.SECONDS);
+            MockHttpServletResponse respCancelar = c.get(20, TimeUnit.SECONDS);
+            assertThat(List.of(respAceptar.getStatus(), respCancelar.getStatus())).containsExactlyInAnyOrder(200, 409);
+
+            boolean ganoAceptar = respAceptar.getStatus() == 200;
+            MockHttpServletResponse perdedora = ganoAceptar ? respCancelar : respAceptar;
+            JsonNode error = new ObjectMapper().readTree(perdedora.getContentAsString(StandardCharsets.UTF_8));
+            assertThat(error.get("codigo").asText()).isEqualTo("TRANSICION_INVALIDA");
+            assertThat(error.get("mensaje").asText()).isEqualTo("La solicitud cambió mientras tanto. Recargala.");
+
+            assertThat(estadoDe(s)).isEqualTo(ganoAceptar ? "ACEPTADA" : "CANCELADA");
+            // un solo aviso, para la contraparte de quien ganó: si aceptó Beto, Ana; si canceló Ana, Beto
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM notificaciones WHERE uuid_solicitud = ?", Integer.class,
+                s.getUuid())).isEqualTo(1);
+            assertThat(avisosDe(ganoAceptar ? "CLIENTE" : "PRESTADOR", ganoAceptar ? ana.getId() : beto.getId()))
+                .hasSize(1);
         } finally {
             pool.shutdownNow();
         }
-        assertThat(estadoDe(s)).isIn("ACEPTADA", "CANCELADA");
-        // el aviso es solo del que ganó
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM notificaciones WHERE uuid_solicitud = ?", Integer.class, s.getUuid()))
-            .isEqualTo(1);
     }
 
     private String estadoDe(Solicitud s) {

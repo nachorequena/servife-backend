@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ar.edu.iessf.servife.catalogo.domain.Disponibilidad;
 import ar.edu.iessf.servife.catalogo.repository.DisponibilidadRepository;
 import ar.edu.iessf.servife.common.error.ConflictoException;
+import ar.edu.iessf.servife.common.formato.Dinero;
 import ar.edu.iessf.servife.common.error.RecursoNoEncontradoException;
 import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.common.paginacion.Pagina;
@@ -163,7 +164,7 @@ public class ServicioDeSolicitudes {
             throw new ValidacionException("precioAcordado", "solo se puede indicar al aceptar");
         }
         String motivo = pedido.motivo() == null || pedido.motivo().isBlank() ? null : pedido.motivo().trim();
-        if (pedido.motivo() != null && !pedido.motivo().isBlank()
+        if (motivo != null
                 && accion != AccionSobreSolicitud.RECHAZAR && accion != AccionSobreSolicitud.CANCELAR) {
             throw new ValidacionException("motivo", "solo se puede indicar al rechazar o cancelar");
         }
