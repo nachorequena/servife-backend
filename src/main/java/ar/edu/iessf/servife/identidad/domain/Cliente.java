@@ -46,6 +46,11 @@ public class Cliente extends EntidadBase implements Cuenta {
     @Column(name = "estado_cuenta", nullable = false)
     private EstadoCuenta estadoCuenta = EstadoCuenta.ACTIVA;
 
+    @Override
+    public Long getId() {
+        return id;
+    }
+
     protected Cliente() {
     }
 

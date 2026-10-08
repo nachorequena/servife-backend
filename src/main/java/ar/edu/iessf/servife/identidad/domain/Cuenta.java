@@ -10,6 +10,9 @@ import ar.edu.iessf.servife.common.seguridad.Rol;
  */
 public interface Cuenta {
 
+    /** PK interna: solo para los services del backend (p. ej. avisos); nunca en DTOs. */
+    Long getId();
+
     UUID getUuid();
 
     Rol getRol();

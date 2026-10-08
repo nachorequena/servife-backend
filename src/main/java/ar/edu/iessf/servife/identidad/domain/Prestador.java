@@ -1,5 +1,6 @@
 package ar.edu.iessf.servife.identidad.domain;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import ar.edu.iessf.servife.catalogo.domain.TipoServicio;
@@ -19,10 +20,13 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 /**
- * Cuenta de prestador (tabla prestadores). Acá van las columnas de identidad; las de perfil
- * (zona, lat, lng, radio_km, descripcion, valoracion_promedio) las agrega Catálogo en este mismo archivo.
+ * Cuenta de prestador (tabla prestadores): columnas de identidad y de perfil de servicio
+ * (zona, lat, lng, radio_km, descripcion; valoracion_promedio es solo lectura).
+ * UPDATE dinámico: solo escribe las columnas modificadas, así guardar el perfil (B7) no pisa
+ * una decisión concurrente del gestor sobre estado_validacion (E6).
  */
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "prestadores")
 public class Prestador extends EntidadBase implements Cuenta {
 
@@ -60,6 +64,30 @@ public class Prestador extends EntidadBase implements Cuenta {
     @Enumerated(EnumType.STRING)
     @Column(name = "estado_cuenta", nullable = false)
     private EstadoCuenta estadoCuenta = EstadoCuenta.ACTIVA;
+
+    @Column(name = "zona")
+    private String zona;
+
+    @Column(name = "lat", precision = 9, scale = 6)
+    private BigDecimal lat;
+
+    @Column(name = "lng", precision = 9, scale = 6)
+    private BigDecimal lng;
+
+    @Column(name = "radio_km")
+    private Integer radioKm;
+
+    @Column(name = "descripcion", columnDefinition = "TEXT")
+    private String descripcion;
+
+    /** Solo lectura: lo calcula el módulo de valoraciones. */
+    @Column(name = "valoracion_promedio", precision = 2, scale = 1, insertable = false, updatable = false)
+    private BigDecimal valoracionPromedio;
+
+    @Override
+    public Long getId() {
+        return id;
+    }
 
     protected Prestador() {
     }
@@ -123,6 +151,50 @@ public class Prestador extends EntidadBase implements Cuenta {
 
     public void setDireccion(String direccion) {
         this.direccion = direccion;
+    }
+
+    /**
+     * Cambia el rubro. Si es distinto al actual, el prestador vuelve a PENDIENTE (sea cual sea su
+     * estado de validación): se revisa de nuevo con el rubro nuevo.
+     */
+    public void cambiarTipoServicio(TipoServicio nuevo) {
+        if (!nuevo.getUuid().equals(tipoServicio.getUuid())) {
+            this.tipoServicio = nuevo;
+            this.estadoValidacion = EstadoValidacion.PENDIENTE;
+        }
+    }
+
+    /** Zona, punto (lat/lng), radio y descripción ya normalizados por el servicio. */
+    public void actualizarPerfil(String zona, BigDecimal lat, BigDecimal lng, Integer radioKm, String descripcion) {
+        this.zona = zona;
+        this.lat = lat;
+        this.lng = lng;
+        this.radioKm = radioKm;
+        this.descripcion = descripcion;
+    }
+
+    public String getZona() {
+        return zona;
+    }
+
+    public BigDecimal getLat() {
+        return lat;
+    }
+
+    public BigDecimal getLng() {
+        return lng;
+    }
+
+    public Integer getRadioKm() {
+        return radioKm;
+    }
+
+    public String getDescripcion() {
+        return descripcion;
+    }
+
+    public BigDecimal getValoracionPromedio() {
+        return valoracionPromedio;
     }
 
     public TipoServicio getTipoServicio() {

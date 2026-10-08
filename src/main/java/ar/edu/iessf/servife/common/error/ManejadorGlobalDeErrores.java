@@ -36,7 +36,8 @@ public class ManejadorGlobalDeErrores {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorRespuesta> validacion(MethodArgumentNotValidException e, HttpServletRequest request) {
         List<ErrorCampo> errores = e.getBindingResult().getFieldErrors().stream()
-            .map(f -> new ErrorCampo(f.getField(), f.getDefaultMessage()))
+            // Un valor que no se pudo convertir (lat=abc) trae el texto de Spring en inglés: lo reemplazamos.
+            .map(f -> new ErrorCampo(f.getField(), f.isBindingFailure() ? "tiene un formato inválido" : f.getDefaultMessage()))
             .toList();
         ErrorRespuesta cuerpo = ErrorRespuesta.de(HttpStatus.BAD_REQUEST.value(), "VALIDACION",
             "Hay campos con errores.", request.getRequestURI(), errores);
