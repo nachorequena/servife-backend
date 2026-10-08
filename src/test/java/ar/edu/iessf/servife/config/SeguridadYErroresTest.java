@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import ar.edu.iessf.servife.catalogo.controller.PrestadorController;
 import ar.edu.iessf.servife.catalogo.controller.TipoServicioController;
+import ar.edu.iessf.servife.catalogo.service.ServicioDePerfilDePrestador;
 import ar.edu.iessf.servife.catalogo.service.TipoServicioService;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
@@ -65,6 +66,9 @@ class SeguridadYErroresTest {
 
     @MockitoBean
     private ServicioDeRecuperacion recuperacion;
+
+    @MockitoBean
+    private ServicioDePerfilDePrestador perfilDePrestador;
 
     private static JwtRequestPostProcessor como(String rol) {
         return jwt()
