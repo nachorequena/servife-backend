@@ -27,9 +27,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import ar.edu.iessf.servife.catalogo.controller.PrestadorController;
 import ar.edu.iessf.servife.catalogo.dto.DisponibilidadResponse;
 import ar.edu.iessf.servife.catalogo.dto.PerfilDeServicioResponse;
+import ar.edu.iessf.servife.catalogo.dto.PrestadorDetalleResponse;
 import ar.edu.iessf.servife.catalogo.dto.TipoServicioResponse;
 import ar.edu.iessf.servife.catalogo.service.BuscadorDePrestadores;
+import ar.edu.iessf.servife.catalogo.service.ServicioDeFichaDePrestador;
 import ar.edu.iessf.servife.catalogo.service.ServicioDePerfilDePrestador;
+import ar.edu.iessf.servife.common.error.RecursoNoEncontradoException;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.common.seguridad.Rol;
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
@@ -56,6 +59,7 @@ class PrestadorControllerTest {
     @Autowired private MockMvc mvc;
     @MockitoBean private ServicioDePerfilDePrestador servicio;
     @MockitoBean private BuscadorDePrestadores buscador;
+    @MockitoBean private ServicioDeFichaDePrestador ficha;
     @MockitoBean private UsuarioActual usuarioActual;
 
     private static JwtRequestPostProcessor como(String rol) {
@@ -147,5 +151,35 @@ class PrestadorControllerTest {
         mvc.perform(put(CONTEXTO + "/prestadores/me/disponibilidad").contextPath(CONTEXTO).with(como("CLIENTE"))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"dias\":[1]}"))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void fichaDelPrestadorDevuelve200() throws Exception {
+        when(ficha.obtener(YO)).thenReturn(new PrestadorDetalleResponse(YO, "Marcos",
+            new TipoServicioResponse(TIPO, "Gas", "flame", true), "Centro", "Gasista", List.of(2, 5),
+            new BigDecimal("4.5"), 3, true));
+
+        mvc.perform(get(CONTEXTO + "/prestadores/" + YO).contextPath(CONTEXTO).with(como("CLIENTE")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.nombreApellido").value("Marcos"))
+            .andExpect(jsonPath("$.tipoServicio.nombre").value("Gas"))
+            .andExpect(jsonPath("$.dias[1]").value(5))
+            .andExpect(jsonPath("$.serviciosRealizados").value(3))
+            .andExpect(jsonPath("$.verificado").value(true));
+    }
+
+    @Test
+    void fichaInexistenteEs404() throws Exception {
+        when(ficha.obtener(YO)).thenThrow(new RecursoNoEncontradoException("No existe."));
+
+        mvc.perform(get(CONTEXTO + "/prestadores/" + YO).contextPath(CONTEXTO).with(como("CLIENTE")))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.codigo").value("NO_ENCONTRADO"));
+    }
+
+    @Test
+    void fichaSinTokenEs401() throws Exception {
+        mvc.perform(get(CONTEXTO + "/prestadores/" + YO).contextPath(CONTEXTO))
+            .andExpect(status().isUnauthorized());
     }
 }

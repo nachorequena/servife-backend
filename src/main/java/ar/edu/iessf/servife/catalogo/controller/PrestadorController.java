@@ -17,18 +17,19 @@ import ar.edu.iessf.servife.catalogo.dto.DisponibilidadRequest;
 import ar.edu.iessf.servife.catalogo.dto.DisponibilidadResponse;
 import ar.edu.iessf.servife.catalogo.dto.PerfilDeServicioResponse;
 import ar.edu.iessf.servife.catalogo.dto.FiltrosDeBusqueda;
+import ar.edu.iessf.servife.catalogo.dto.PrestadorDetalleResponse;
 import ar.edu.iessf.servife.catalogo.dto.PrestadorEnListaResponse;
 import ar.edu.iessf.servife.catalogo.service.BuscadorDePrestadores;
+import ar.edu.iessf.servife.catalogo.service.ServicioDeFichaDePrestador;
 import ar.edu.iessf.servife.catalogo.service.ServicioDePerfilDePrestador;
 import ar.edu.iessf.servife.common.paginacion.Pagina;
-import ar.edu.iessf.servife.common.error.NoImplementadoException;
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import jakarta.validation.Valid;
 
 /**
  * Módulo B — Catálogo y búsqueda (dueño: Juan Pablo Saravia).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * B5, B7, B8 y GET /prestadores/me/perfil están implementados; B6 siguen como stub (501).
+ * B5, B6, B7, B8 y GET /prestadores/me/perfil están implementados.
  */
 @RestController
 @RequestMapping("/prestadores")
@@ -38,12 +39,15 @@ public class PrestadorController {
 
     private final BuscadorDePrestadores buscador;
 
+    private final ServicioDeFichaDePrestador ficha;
+
     private final UsuarioActual usuarioActual;
 
-    public PrestadorController(ServicioDePerfilDePrestador perfiles, BuscadorDePrestadores buscador,
+    public PrestadorController(ServicioDePerfilDePrestador perfiles, BuscadorDePrestadores buscador, ServicioDeFichaDePrestador ficha,
             UsuarioActual usuarioActual) {
         this.perfiles = perfiles;
         this.buscador = buscador;
+        this.ficha = ficha;
         this.usuarioActual = usuarioActual;
     }
 
@@ -61,11 +65,11 @@ public class PrestadorController {
         return ResponseEntity.ok(perfiles.obtenerPerfil(usuarioActual.uuid()));
     }
 
-    /** B6 · GET /prestadores/{uuid} · CU05 · Ficha del prestador: sello verificado, certificaciones aprobadas, cantidad de servicios realizados (D01, D07). Sin tarifa (D02). */
+    /** B6 · GET /prestadores/{uuid} · CU05 · Ficha del prestador: sello verificado, días, valoración y cantidad de servicios realizados (D01, D07). Sin tarifa (D02). 404 si no está aprobado, activo y vigente. */
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/{uuid}")
-    public ResponseEntity<Void> obtener(@PathVariable UUID uuid) {
-        throw new NoImplementadoException("B6");
+    public ResponseEntity<PrestadorDetalleResponse> obtener(@PathVariable UUID uuid) {
+        return ResponseEntity.ok(ficha.obtener(uuid));
     }
 
     /** B7 · PUT /prestadores/me/perfil · CU03 · Rubro, zona, radio y descripción. Sin tarifa (D02). Cambiar de rubro vuelve el estado a PENDIENTE. */
