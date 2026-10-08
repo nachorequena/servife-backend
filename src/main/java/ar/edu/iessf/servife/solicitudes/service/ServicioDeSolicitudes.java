@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +20,8 @@ import ar.edu.iessf.servife.catalogo.domain.Disponibilidad;
 import ar.edu.iessf.servife.catalogo.repository.DisponibilidadRepository;
 import ar.edu.iessf.servife.common.error.RecursoNoEncontradoException;
 import ar.edu.iessf.servife.common.error.ValidacionException;
+import ar.edu.iessf.servife.common.paginacion.Pagina;
+import ar.edu.iessf.servife.common.paginacion.Paginacion;
 import ar.edu.iessf.servife.common.seguridad.Rol;
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.gestion.service.Avisos;
@@ -29,17 +34,21 @@ import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 import ar.edu.iessf.servife.reputacion.domain.Archivo;
 import ar.edu.iessf.servife.reputacion.repository.ArchivoRepository;
+import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
 import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
 import ar.edu.iessf.servife.solicitudes.dto.CrearSolicitudRequest;
+import ar.edu.iessf.servife.solicitudes.dto.ParteResponse;
+import ar.edu.iessf.servife.solicitudes.dto.SolicitudEnListaResponse;
 import ar.edu.iessf.servife.solicitudes.dto.SolicitudResponse;
 import ar.edu.iessf.servife.solicitudes.mapper.SolicitudMapper;
 import ar.edu.iessf.servife.solicitudes.repository.SolicitudRepository;
 
-/** Solicitudes de servicio: C1 (crear, CU06). Todo en una transacción: solicitud, imágenes y aviso. */
+/** Solicitudes de servicio: C1 (crear, CU06), C2 (listar) y C3 (ver). C1: todo en una transacción: solicitud, imágenes y aviso. */
 @Service
 public class ServicioDeSolicitudes {
 
     private static final ZoneId ARGENTINA = ZoneId.of("America/Argentina/Buenos_Aires");
+    private static final int LARGO_DESCRIPCION_EN_LISTA = 140;
     private static final DateTimeFormatter DIA_MES_ANIO = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final SolicitudRepository solicitudes;
@@ -103,6 +112,54 @@ public class ServicioDeSolicitudes {
             solicitud.getUuid());
 
         return SolicitudMapper.aRespuesta(solicitud, pedidas, Rol.CLIENTE);
+    }
+
+    /**
+     * C2. Las solicitudes del usuario (cliente o prestador), más recientes primero; sin estados pedidos
+     * devuelve todos. Las partes y el tipo vienen en la misma consulta (sin N+1).
+     */
+    @Transactional(readOnly = true)
+    public Pagina<SolicitudEnListaResponse> listarMias(List<EstadoSolicitud> estados, Integer page, Integer size) {
+        Rol rol = usuarioActual.rol();
+        List<EstadoSolicitud> filtro = estados == null || estados.isEmpty() ? List.of(EstadoSolicitud.values()) : estados;
+        Pageable pagina = Paginacion.pedir(page, size, Sort.by(Sort.Order.desc("creadoEn"), Sort.Order.desc("uuid")));
+        Page<Solicitud> resultado = rol == Rol.CLIENTE
+            ? solicitudes.findByClienteAndEstadoInAndEliminadoEnIsNull(clienteActual(), filtro, pagina)
+            : solicitudes.findByPrestadorAndEstadoInAndEliminadoEnIsNull(prestadorActual(), filtro, pagina);
+        return Pagina.de(resultado, s -> enLista(s, rol));
+    }
+
+    /** C3. Si no sos parte de la solicitud (o está dada de baja), 404. */
+    @Transactional(readOnly = true)
+    public SolicitudResponse obtener(UUID uuid) {
+        Rol rol = usuarioActual.rol();
+        UUID yo = usuarioActual.uuid();
+        Solicitud s = solicitudes.findDetalleByUuidAndEliminadoEnIsNull(uuid)
+            .filter(x -> rol == Rol.CLIENTE && yo.equals(x.getCliente().getUuid())
+                || rol == Rol.PRESTADOR && yo.equals(x.getPrestador().getUuid()))
+            .orElseThrow(() -> new RecursoNoEncontradoException("No existe."));
+        return SolicitudMapper.aRespuesta(s, solicitudes.uuidsDeImagenes(s.getId()), rol);
+    }
+
+    private SolicitudEnListaResponse enLista(Solicitud s, Rol rol) {
+        SolicitudResponse completa = SolicitudMapper.aRespuesta(s, List.of(), rol);
+        ParteResponse contraparte = rol == Rol.CLIENTE ? completa.prestador() : completa.cliente();
+        String descripcion = s.getDescripcion();
+        if (descripcion.length() > LARGO_DESCRIPCION_EN_LISTA) {
+            descripcion = descripcion.substring(0, LARGO_DESCRIPCION_EN_LISTA) + "…";
+        }
+        return new SolicitudEnListaResponse(s.getUuid(), s.getEstado(), contraparte, completa.tipoServicio(),
+            s.getFechaDeseada(), s.getHoraPreferida(), descripcion, s.getDireccion(), s.getCreadoEn());
+    }
+
+    private Cliente clienteActual() {
+        return clientes.findByUuidAndEliminadoEnIsNull(usuarioActual.uuid())
+            .orElseThrow(() -> new RecursoNoEncontradoException("No existe."));
+    }
+
+    private Prestador prestadorActual() {
+        return prestadores.findByUuidAndEliminadoEnIsNull(usuarioActual.uuid())
+            .orElseThrow(() -> new RecursoNoEncontradoException("No existe."));
     }
 
     /** Cada imagen tiene que existir, ser de este cliente y no estar en otra solicitud; sin repetidas. */
