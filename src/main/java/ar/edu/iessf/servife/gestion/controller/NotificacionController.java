@@ -21,10 +21,8 @@ import ar.edu.iessf.servife.gestion.dto.ContadorDeAvisosResponse;
 import ar.edu.iessf.servife.gestion.service.Avisos;
 
 /**
- * Módulo E — Gestión, validación y mensajería (dueño: Ignacio Requena).
- * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * E11 (avisos dentro de la app) está implementado; el resto de los controllers del módulo
- * siguen siendo stubs que responden 501.
+ * E11 · Avisos dentro de la app (porción 4: Pedro Soria). Endpoints según
+ * servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo. Siempre del usuario del token.
  */
 @RestController
 @RequestMapping("/notificaciones")
