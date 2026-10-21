@@ -30,4 +30,13 @@ public interface Cuenta {
 
     /** Reemplaza el hash de la contraseña (el servicio ya lo calculó con el PasswordEncoder). */
     void cambiarContrasenia(String hash);
+
+    /** Suspende o reactiva la cuenta (E4, porción 5). */
+    void setEstadoCuenta(EstadoCuenta estadoCuenta);
+
+    /** Cambia el email, normalizado; el servicio ya verificó que no lo use otra cuenta (E14, porción 5). */
+    void cambiarEmail(String email);
+
+    /** Baja lógica (E15, porción 5): la implementa EntidadBase. */
+    void darDeBaja();
 }
