@@ -29,7 +29,7 @@ public final class SolicitudMapper {
     /**
      * @param imagenIds uuid de los archivos adjuntos
      * @param rolActual rol del usuario que consulta, para calcular las acciones disponibles
-     * @param hoy el día de hoy en Argentina: antes de la fecha deseada no se ofrece INICIAR (C4 contestaría 409)
+     * @param hoy el día de hoy en Argentina: antes de la fecha deseada no se ofrecen INICIAR, CONFIRMAR_REALIZADO ni NO_SE_PRESENTO (C4 contestaría 409)
      * @param uuidChat el chat de la solicitud (porción 4)
      */
     public static SolicitudResponse aRespuesta(Solicitud s, List<UUID> imagenIds, Rol rolActual, LocalDate hoy,
@@ -50,7 +50,7 @@ public final class SolicitudMapper {
     private static List<AccionSobreSolicitud> accionesDisponibles(Solicitud s, Rol rolActual, LocalDate hoy) {
         boolean antesDeLaFecha = s.getFechaDeseada() != null && hoy.isBefore(s.getFechaDeseada());
         return MaquinaDeEstados.accionesDisponibles(s.getEstado(), rolActual).stream()
-            .filter(a -> !(a == AccionSobreSolicitud.INICIAR && antesDeLaFecha))
+            .filter(a -> !(a.requiereLlegarLaFecha() && antesDeLaFecha))
             .toList();
     }
 
