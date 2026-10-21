@@ -18,50 +18,59 @@ import ar.edu.iessf.servife.gestion.dto.PrestadorPendienteResponse;
 import ar.edu.iessf.servife.gestion.dto.ValidacionResponse;
 import ar.edu.iessf.servife.identidad.domain.EstadoValidacion;
 import ar.edu.iessf.servife.identidad.domain.Prestador;
+import ar.edu.iessf.servife.identidad.repository.GestorRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 
 /**
  * E5 y E6 · CU14 (versión mínima, sin documentos): lista los prestadores pendientes y deja que el
- * gestor los apruebe o rechace, avisándoles. La suspensión de la cuenta no interviene: el gestor
- * decide la validación de forma independiente.
+ * gestor los apruebe o rechace, avisándoles y dejando quién decidió, cuándo y con qué motivo (V7).
+ * La suspensión de la cuenta no interviene: el gestor decide la validación de forma independiente.
  */
 @Service
 public class ServicioDeValidacion {
 
     private final PrestadorRepository prestadores;
+    private final GestorRepository gestores;
     private final Avisos avisos;
     private final Clock reloj;
 
-    public ServicioDeValidacion(PrestadorRepository prestadores, Avisos avisos, Clock reloj) {
+    public ServicioDeValidacion(PrestadorRepository prestadores, GestorRepository gestores, Avisos avisos, Clock reloj) {
         this.prestadores = prestadores;
+        this.gestores = gestores;
         this.avisos = avisos;
         this.reloj = reloj;
     }
 
-    /** Pendientes no dados de baja, los más viejos primero (el orden lo impone el servicio). */
+    /**
+     * Pendientes no dados de baja, los que esperan hace más primero (el orden lo impone el servicio):
+     * por fecha de postulación, que un cambio de rubro (B7) renueva.
+     */
     @Transactional(readOnly = true)
     public Pagina<PrestadorPendienteResponse> listarPendientes(Pageable pagina) {
-        Pageable ordenada = PageRequest.of(pagina.getPageNumber(), pagina.getPageSize(), Sort.by("creadoEn", "uuid"));
+        Pageable ordenada = PageRequest.of(pagina.getPageNumber(), pagina.getPageSize(), Sort.by("postuladoEn", "uuid"));
         return Pagina.de(prestadores.findByEstadoValidacionAndEliminadoEnIsNull(EstadoValidacion.PENDIENTE, ordenada),
             ServicioDeValidacion::aRespuesta);
     }
 
     /**
-     * Aprueba o rechaza a un prestador PENDIENTE y le deja un aviso en la misma transacción.
+     * Aprueba o rechaza a un prestador PENDIENTE y le deja un aviso en la misma transacción. El motivo
+     * se guarda con cualquiera de las dos decisiones, pero solo el de un rechazo llega al prestador.
      * 404 si no existe o está dado de baja; 409 VALIDACION_YA_RESUELTA si ya no está pendiente.
      */
     @Transactional
-    public ValidacionResponse decidir(UUID uuid, Decision decision, String motivo) {
+    public ValidacionResponse decidir(UUID uuid, Decision decision, String motivo, UUID uuidGestor) {
         Prestador existente = prestadores.findByUuidAndEliminadoEnIsNull(uuid)
             .orElseThrow(() -> new RecursoNoEncontradoException("No existe."));
+        Long gestor = gestores.findByUuidAndEliminadoEnIsNull(uuidGestor)
+            .orElseThrow(() -> new IllegalStateException("El gestor autenticado no existe")).getId();
         boolean aprobar = decision == Decision.APROBAR;
         EstadoValidacion nuevo = aprobar ? EstadoValidacion.APROBADO : EstadoValidacion.RECHAZADO;
+        String motivoLimpio = motivo == null || motivo.isBlank() ? null : motivo.trim();
 
-        if (prestadores.resolverSiPendiente(existente.getId(), nuevo, reloj.instant()) != 1) {
+        if (prestadores.resolverSiPendiente(existente.getId(), nuevo, gestor, motivoLimpio, reloj.instant()) != 1) {
             throw new ConflictoException("VALIDACION_YA_RESUELTA", "Ese prestador ya fue revisado.");
         }
 
-        String motivoLimpio = motivo == null || motivo.isBlank() ? null : motivo.trim();
         if (aprobar) {
             avisos.avisar(existente, TipoDeAviso.PERFIL_APROBADO, "Tu perfil fue aprobado",
                 "Tu perfil fue aprobado. Ya aparecés en las búsquedas.", null);
@@ -76,6 +85,6 @@ public class ServicioDeValidacion {
         var t = p.getTipoServicio();
         return new PrestadorPendienteResponse(p.getUuid(), p.getNombreApellido(), p.getEmail(),
             new TipoServicioResponse(t.getUuid(), t.getNombre(), t.getIcono(), t.isRequiereMatricula()),
-            p.getCreadoEn());
+            p.getPostuladoEn());
     }
 }

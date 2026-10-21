@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import ar.edu.iessf.servife.common.error.NoImplementadoException;
 import ar.edu.iessf.servife.common.paginacion.Pagina;
 import ar.edu.iessf.servife.common.paginacion.Paginacion;
+import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.gestion.dto.DecisionDeValidacionRequest;
 import ar.edu.iessf.servife.gestion.dto.PrestadorPendienteResponse;
 import ar.edu.iessf.servife.gestion.dto.ValidacionResponse;
@@ -35,12 +36,14 @@ import jakarta.validation.Valid;
 public class AdminValidacionController {
 
     private final ServicioDeValidacion servicio;
+    private final UsuarioActual usuarioActual;
 
-    public AdminValidacionController(ServicioDeValidacion servicio) {
+    public AdminValidacionController(ServicioDeValidacion servicio, UsuarioActual usuarioActual) {
         this.servicio = servicio;
+        this.usuarioActual = usuarioActual;
     }
 
-    /** E5 · GET /admin/validaciones · CU14 · Prestadores pendientes de validación, los más viejos primero. */
+    /** E5 · GET /admin/validaciones · CU14 · Prestadores pendientes de validación, los que esperan hace más primero. */
     @GetMapping("/validaciones")
     public Pagina<PrestadorPendienteResponse> listarPendientes(@RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
@@ -48,10 +51,10 @@ public class AdminValidacionController {
         return servicio.listarPendientes(pagina);
     }
 
-    /** E6 · PATCH /admin/prestadores/{uuid}/validacion · CU14 · Aprueba o rechaza (motivo opcional) y avisa al prestador. 409 si ya fue revisado. */
+    /** E6 · PATCH /admin/prestadores/{uuid}/validacion · CU14 · Aprueba o rechaza (motivo opcional), guarda quién decidió y avisa al prestador. 409 si ya fue revisado. */
     @PatchMapping("/prestadores/{uuid}/validacion")
     public ValidacionResponse validar(@PathVariable UUID uuid, @Valid @RequestBody DecisionDeValidacionRequest pedido) {
-        return servicio.decidir(uuid, pedido.decision(), pedido.motivo());
+        return servicio.decidir(uuid, pedido.decision(), pedido.motivo(), usuarioActual.uuid());
     }
 
     /** E8 · GET /admin/prestadores/{uuid}/documentos · CU14 · Descarga controlada del expediente. Nunca por URL pública (.ai/07-security.md). */

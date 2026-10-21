@@ -29,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import ar.edu.iessf.servife.catalogo.dto.TipoServicioResponse;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.common.paginacion.Pagina;
+import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.config.CorsConfig;
 import ar.edu.iessf.servife.config.JwtConfig;
 import ar.edu.iessf.servife.config.SeguridadConfig;
@@ -39,9 +40,9 @@ import ar.edu.iessf.servife.gestion.dto.ValidacionResponse;
 import ar.edu.iessf.servife.gestion.service.ServicioDeValidacion;
 import ar.edu.iessf.servife.identidad.domain.EstadoValidacion;
 
-/** E5 y E6: roles y validación del cuerpo. La lógica se prueba en ServicioDeValidacionTest. */
+/** E5 y E6: roles, validación del pedido y quién decide. La lógica se prueba en ServicioDeValidacionTest. */
 @WebMvcTest(controllers = AdminValidacionController.class)
-@Import({SeguridadConfig.class, JwtConfig.class, CorsConfig.class, EscritorDeErrores.class})
+@Import({SeguridadConfig.class, JwtConfig.class, CorsConfig.class, EscritorDeErrores.class, UsuarioActual.class})
 @TestPropertySource(properties = {
     "servife.jwt.secreto=secreto-de-prueba-de-al-menos-32-caracteres",
     "servife.jwt.duracion-access=15m",
@@ -52,12 +53,14 @@ class AdminValidacionControllerTest {
 
     private static final String CONTEXTO = "/api/v1";
     private static final UUID PRESTADOR = UUID.fromString("7f1c2d4e-0000-4000-8000-0000000000bb");
+    private static final UUID GESTOR = UUID.fromString("7f1c2d4e-0000-4000-8000-0000000000aa");
 
     @Autowired private MockMvc mvc;
     @MockitoBean private ServicioDeValidacion servicio;
 
     private static JwtRequestPostProcessor como(String rol) {
-        return jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim(JwtConfig.CLAIM_ROL, rol))
+        UUID sujeto = "GESTOR".equals(rol) ? GESTOR : UUID.randomUUID();
+        return jwt().jwt(j -> j.subject(sujeto.toString()).claim(JwtConfig.CLAIM_ROL, rol))
             .authorities(new SimpleGrantedAuthority("ROLE_" + rol));
     }
 
@@ -89,12 +92,13 @@ class AdminValidacionControllerTest {
             .andExpect(jsonPath("$.contenido[0].uuid").value(uuid.toString()))
             .andExpect(jsonPath("$.contenido[0].nombreApellido").value("Pedro"))
             .andExpect(jsonPath("$.contenido[0].tipoServicio.nombre").value("Gas"))
+            .andExpect(jsonPath("$.contenido[0].postuladoEn").value("2026-10-01T10:00:00Z"))
             .andExpect(jsonPath("$.totalElementos").value(1));
     }
 
     @Test
     void gestorDecideYRecibeElEstado() throws Exception {
-        when(servicio.decidir(eq(PRESTADOR), eq(Decision.RECHAZAR), eq("Falta matrícula")))
+        when(servicio.decidir(eq(PRESTADOR), eq(Decision.RECHAZAR), eq("Falta matrícula"), eq(GESTOR)))
             .thenReturn(new ValidacionResponse(PRESTADOR, EstadoValidacion.RECHAZADO));
 
         mvc.perform(patch(ruta()).contextPath(CONTEXTO).with(como("GESTOR")).contentType(MediaType.APPLICATION_JSON)
@@ -102,7 +106,7 @@ class AdminValidacionControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.uuid").value(PRESTADOR.toString()))
             .andExpect(jsonPath("$.estadoValidacion").value("RECHAZADO"));
-        verify(servicio).decidir(PRESTADOR, Decision.RECHAZAR, "Falta matrícula");
+        verify(servicio).decidir(PRESTADOR, Decision.RECHAZAR, "Falta matrícula", GESTOR);
     }
 
     @Test
@@ -113,6 +117,34 @@ class AdminValidacionControllerTest {
                     .content(cuerpo))
                 .andExpect(status().isBadRequest());
         }
+        verifyNoInteractions(servicio);
+    }
+    @Test
+    void sinTokenEs401() throws Exception {
+        mvc.perform(get(CONTEXTO + "/admin/validaciones").contextPath(CONTEXTO))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.codigo").value("NO_AUTENTICADO"));
+        mvc.perform(patch(ruta()).contextPath(CONTEXTO).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"decision\":\"APROBAR\"}"))
+            .andExpect(status().isUnauthorized());
+        verifyNoInteractions(servicio);
+    }
+
+    @Test
+    void paginaOTamanioInvalidosEs400() throws Exception {
+        for (String consulta : List.of("page=-1", "size=0", "size=51", "page=uno")) {
+            mvc.perform(get(CONTEXTO + "/admin/validaciones?" + consulta).contextPath(CONTEXTO).with(como("GESTOR")))
+                .andExpect(status().isBadRequest());
+        }
+        verifyNoInteractions(servicio);
+    }
+
+    @Test
+    void uuidMalFormadoEs400() throws Exception {
+        mvc.perform(patch(CONTEXTO + "/admin/prestadores/no-es-un-uuid/validacion").contextPath(CONTEXTO).with(como("GESTOR"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"APROBAR\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.codigo").value("SOLICITUD_INVALIDA"));
         verifyNoInteractions(servicio);
     }
 }
