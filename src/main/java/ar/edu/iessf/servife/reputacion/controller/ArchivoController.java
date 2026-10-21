@@ -5,6 +5,7 @@ import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.UUID;
 
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -24,7 +25,7 @@ import ar.edu.iessf.servife.reputacion.service.ArchivoLeido;
 import ar.edu.iessf.servife.reputacion.service.ServicioDeArchivos;
 
 /**
- * Módulo D — Reputación y trabajos (dueño: Facundo Bustamante).
+ * Archivos (porción 4: Pedro Soria; está en el paquete de reputación por la tabla archivos).
  * Endpoints según servife-ia/.ai/05-api-contract.md. D7 (subida) y la lectura protegida
  * GET /archivos/{uuid} están implementados.
  */
@@ -56,14 +57,18 @@ public class ArchivoController {
             .body(creado);
     }
 
-    /** GET /archivos/{uuid} · Bytes de la imagen. Solo el dueño o un participante de una solicitud que la incluye; si no, 404. */
+    /**
+     * GET /archivos/{uuid} · Bytes de la imagen, en streaming desde el almacén. Lo ve el dueño, un participante
+     * de una solicitud que la incluye o cualquiera si está en una publicación visible; si no, 404.
+     */
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/{uuid}")
-    public ResponseEntity<byte[]> leer(@PathVariable UUID uuid) {
+    public ResponseEntity<InputStreamResource> leer(@PathVariable UUID uuid) {
         ArchivoLeido leido = servicio.leer(uuid, usuario.uuid(), usuario.rol());
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType(leido.mime()))
+            .contentLength(leido.bytes())
             .cacheControl(CacheControl.maxAge(Duration.ofHours(1)).cachePrivate())
-            .body(leido.datos());
+            .body(new InputStreamResource(leido.datos()));
     }
 }

@@ -1,21 +1,18 @@
 package ar.edu.iessf.servife.reputacion.service;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-import ar.edu.iessf.servife.common.archivos.ArchivoFaltanteException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import ar.edu.iessf.servife.common.archivos.AlmacenDeArchivos;
+import ar.edu.iessf.servife.common.archivos.ArchivoFaltanteException;
 import ar.edu.iessf.servife.common.error.NegocioException;
 import ar.edu.iessf.servife.common.error.RecursoNoEncontradoException;
 import ar.edu.iessf.servife.common.error.ValidacionException;
@@ -28,8 +25,9 @@ import ar.edu.iessf.servife.reputacion.repository.ArchivoRepository;
 
 /**
  * D7 y lectura protegida de imágenes. El tipo se decide por la firma de los bytes (no por el
- * Content-Type ni la extensión que declara el cliente). Ver un archivo: el dueño, o el cliente o
- * prestador de una solicitud no eliminada que lo incluye; cualquier otro recibe 404.
+ * Content-Type ni la extensión que declara el cliente). Ver un archivo: el dueño; el cliente o
+ * prestador de una solicitud no eliminada que lo incluye; o cualquier usuario autenticado si está en
+ * una publicación visible (D3). Cualquier otro recibe 404.
  */
 @Service
 public class ServicioDeArchivos {
@@ -80,6 +78,7 @@ public class ServicioDeArchivos {
         return new ArchivoResponse(archivo.getUuid(), mime, datos.length);
     }
 
+    /** Abre el archivo para responderlo en streaming; el stream lo cierra quien lo consume. */
     @Transactional(readOnly = true)
     public ArchivoLeido leer(UUID archivoUuid, UUID cuentaUuid, Rol rol) {
         Archivo archivo = archivos.findByUuidAndEliminadoEnIsNull(archivoUuid)
@@ -88,13 +87,11 @@ public class ServicioDeArchivos {
         if (!puedeVer(archivo, cuenta, rol)) {
             throw noEncontrado();
         }
-        try (InputStream entrada = almacen.leer(archivo.getRuta())) {
-            return new ArchivoLeido(archivo.getMime(), entrada.readAllBytes());
+        try {
+            return new ArchivoLeido(archivo.getMime(), archivo.getBytes(), almacen.leer(archivo.getRuta()));
         } catch (ArchivoFaltanteException e) {
             log.warn("El archivo {} existe en la base pero no en el almacén", archivoUuid);
             throw noEncontrado();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
         }
     }
 
@@ -102,7 +99,8 @@ public class ServicioDeArchivos {
         if (archivo.getRolPropietario() == rol && archivo.getIdPropietario().equals(cuenta.getId())) {
             return true;
         }
-        return archivos.esParticipanteDeSolicitudConArchivo(archivo.getId(), cuenta.getId(), rol.name());
+        return archivos.esParticipanteDeSolicitudConArchivo(archivo.getId(), cuenta.getId(), rol.name())
+            || archivos.estaEnPublicacionVisible(archivo.getId());
     }
 
     private static RecursoNoEncontradoException noEncontrado() {

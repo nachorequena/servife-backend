@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import ar.edu.iessf.servife.common.error.NoImplementadoException;
 
 /**
- * Módulo E — Gestión, validación y mensajería (dueño: Ignacio Requena).
+ * Módulo E — Mensajería y avisos (porción 4: Pedro Soria).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
  * Cada método es un stub que responde 501 hasta que se implemente: definí los DTOs en dto/,
  * la lógica en service/ y reemplazá el throw.

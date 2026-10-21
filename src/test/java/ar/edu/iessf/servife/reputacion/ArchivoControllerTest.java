@@ -143,7 +143,22 @@ class ArchivoControllerTest {
             .andExpect(status().isOk())
             .andExpect(header().string("Content-Type", "image/png"))
             .andExpect(header().string("Cache-Control", "max-age=3600, private"))
+            .andExpect(header().longValue("Content-Length", PNG.length))
             .andExpect(content().bytes(PNG));
+    }
+
+    @Test
+    void getConUuidMalFormadoEs400() throws Exception {
+        Cliente ana = cliente();
+        mvc.perform(get(API + "/archivos/no-es-un-uuid").contextPath(API).with(como(ana.getUuid(), "CLIENTE")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.codigo").value("SOLICITUD_INVALIDA"));
+    }
+
+    @Test
+    void getSinTokenEs401() throws Exception {
+        mvc.perform(get(API + "/archivos/" + UUID.randomUUID()).contextPath(API))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

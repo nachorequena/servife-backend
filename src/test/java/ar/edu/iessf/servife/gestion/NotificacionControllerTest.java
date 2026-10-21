@@ -122,6 +122,13 @@ class NotificacionControllerTest {
     }
 
     @Test
+    void marcarLeidaConUuidMalFormadoEs400() throws Exception {
+        mvc.perform(patch(RUTA + "/no-es-un-uuid/leida").contextPath(CONTEXTO).with(como("CLIENTE")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.codigo").value("SOLICITUD_INVALIDA"));
+    }
+
+    @Test
     void contadorDevuelveSoloLaCantidad() throws Exception {
         when(avisos.contarNoLeidos(YO, Rol.GESTOR)).thenReturn(3L);
 

@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -31,15 +35,18 @@ import ar.edu.iessf.servife.common.error.RecursoNoEncontradoException;
 import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.common.seguridad.Rol;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
+import ar.edu.iessf.servife.identidad.domain.Gestor;
 import ar.edu.iessf.servife.identidad.domain.Prestador;
 import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
+import ar.edu.iessf.servife.identidad.repository.GestorRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 import ar.edu.iessf.servife.reputacion.dto.ArchivoResponse;
+import ar.edu.iessf.servife.reputacion.service.ArchivoLeido;
 import ar.edu.iessf.servife.reputacion.service.ServicioDeArchivos;
 import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
 import ar.edu.iessf.servife.solicitudes.repository.SolicitudRepository;
 
-/** Subida (firma, tamaño, nombre en disco) y lectura protegida (dueño o participante) contra PostgreSQL real. */
+/** Subida (firma, tamaño, nombre en disco) y lectura protegida (dueño, participante o publicación visible) contra PostgreSQL real. */
 @SpringBootTest(properties = "servife.jwt.secreto=secreto-de-prueba-de-al-menos-32-caracteres")
 @Testcontainers(disabledWithoutDocker = true)
 class ServicioDeArchivosTest {
@@ -64,6 +71,8 @@ class ServicioDeArchivosTest {
     @Autowired private AlmacenDeArchivos almacen;
     @Autowired private ClienteRepository clientes;
     @Autowired private PrestadorRepository prestadores;
+    @Autowired private GestorRepository gestores;
+    @Autowired private TransactionTemplate transaccion;
     @Autowired private TipoServicioRepository tiposServicio;
     @Autowired private SolicitudRepository solicitudes;
     @Autowired private JdbcTemplate jdbc;
@@ -75,6 +84,19 @@ class ServicioDeArchivosTest {
     private Prestador prestador() {
         TipoServicio tipo = tiposServicio.findByEliminadoEnIsNullOrderByNombre().get(0);
         return prestadores.save(new Prestador("Beto", UUID.randomUUID() + "@mail.com", "hash", tipo));
+    }
+
+    /** Lee y cierra el stream que devuelve leer. */
+    private static byte[] contenido(ArchivoLeido leido) {
+        try (InputStream datos = leido.datos()) {
+            return datos.readAllBytes();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private byte[] leer(ArchivoResponse archivo, UUID quien, Rol rol) {
+        return contenido(servicio.leer(archivo.uuid(), quien, rol));
     }
 
     @Test
@@ -134,8 +156,10 @@ class ServicioDeArchivosTest {
         Cliente intruso = cliente();
         ArchivoResponse subido = servicio.subir(ana.getUuid(), Rol.CLIENTE, PNG);
 
-        assertThat(servicio.leer(subido.uuid(), ana.getUuid(), Rol.CLIENTE).datos()).isEqualTo(PNG);
-        assertThat(servicio.leer(subido.uuid(), ana.getUuid(), Rol.CLIENTE).mime()).isEqualTo("image/png");
+        ArchivoLeido leido = servicio.leer(subido.uuid(), ana.getUuid(), Rol.CLIENTE);
+        assertThat(leido.mime()).isEqualTo("image/png");
+        assertThat(leido.bytes()).isEqualTo(PNG.length);
+        assertThat(contenido(leido)).isEqualTo(PNG);
         assertThatThrownBy(() -> servicio.leer(subido.uuid(), intruso.getUuid(), Rol.CLIENTE))
             .isInstanceOf(RecursoNoEncontradoException.class);
         assertThatThrownBy(() -> servicio.leer(subido.uuid(), beto.getUuid(), Rol.PRESTADOR))
@@ -146,7 +170,7 @@ class ServicioDeArchivosTest {
         jdbc.update("INSERT INTO solicitud_imagenes (id_solicitud, id_archivo) SELECT ?, id_archivo FROM archivos WHERE uuid = ?",
             s.getId(), subido.uuid());
 
-        assertThat(servicio.leer(subido.uuid(), beto.getUuid(), Rol.PRESTADOR).datos()).isEqualTo(PNG);
+        assertThat(leer(subido, beto.getUuid(), Rol.PRESTADOR)).isEqualTo(PNG);
         assertThatThrownBy(() -> servicio.leer(subido.uuid(), intruso.getUuid(), Rol.CLIENTE))
             .isInstanceOf(RecursoNoEncontradoException.class);
 
@@ -154,6 +178,64 @@ class ServicioDeArchivosTest {
         solicitudes.save(s);
         assertThatThrownBy(() -> servicio.leer(subido.uuid(), beto.getUuid(), Rol.PRESTADOR))
             .isInstanceOf(RecursoNoEncontradoException.class);
+    }
+
+    @Test
+    void elGestorLeeLoQueSubioPeroNoLasImagenesAjenas() {
+        Gestor gema = gestores.save(new Gestor("Gema", UUID.randomUUID() + "@mail.com", "hash"));
+        Cliente ana = cliente();
+        ArchivoResponse propio = servicio.subir(gema.getUuid(), Rol.GESTOR, PNG);
+        ArchivoResponse ajeno = servicio.subir(ana.getUuid(), Rol.CLIENTE, PNG);
+
+        assertThat(leer(propio, gema.getUuid(), Rol.GESTOR)).isEqualTo(PNG);
+        assertThatThrownBy(() -> servicio.leer(ajeno.uuid(), gema.getUuid(), Rol.GESTOR))
+            .isInstanceOf(RecursoNoEncontradoException.class);
+    }
+
+    @Test
+    void cualquieraLeeLaImagenDeUnaPublicacionDeUnPrestadorVisible() {
+        Prestador beto = prestador();
+        Cliente intruso = cliente();
+        ArchivoResponse foto = servicio.subir(beto.getUuid(), Rol.PRESTADOR, PNG);
+        Long publicacion = jdbc.queryForObject(
+            "INSERT INTO publicaciones (id_prestador, titulo) VALUES (?, 'Baño nuevo') RETURNING id_publicacion",
+            Long.class, beto.getId());
+        jdbc.update("INSERT INTO publicacion_imagenes (id_publicacion, id_archivo) SELECT ?, id_archivo FROM archivos WHERE uuid = ?",
+            publicacion, foto.uuid());
+
+        // Un prestador PENDIENTE no es visible: sus publicaciones tampoco.
+        assertThatThrownBy(() -> servicio.leer(foto.uuid(), intruso.getUuid(), Rol.CLIENTE))
+            .isInstanceOf(RecursoNoEncontradoException.class);
+
+        jdbc.update("UPDATE prestadores SET estado_validacion = 'APROBADO' WHERE id_prestador = ?", beto.getId());
+        assertThat(leer(foto, intruso.getUuid(), Rol.CLIENTE)).isEqualTo(PNG);
+
+        jdbc.update("UPDATE prestadores SET estado_cuenta = 'SUSPENDIDA' WHERE id_prestador = ?", beto.getId());
+        assertThatThrownBy(() -> servicio.leer(foto.uuid(), intruso.getUuid(), Rol.CLIENTE))
+            .isInstanceOf(RecursoNoEncontradoException.class);
+
+        jdbc.update("UPDATE prestadores SET estado_cuenta = 'ACTIVA' WHERE id_prestador = ?", beto.getId());
+        jdbc.update("UPDATE publicaciones SET eliminado_en = now() WHERE id_publicacion = ?", publicacion);
+        assertThatThrownBy(() -> servicio.leer(foto.uuid(), intruso.getUuid(), Rol.CLIENTE))
+            .isInstanceOf(RecursoNoEncontradoException.class);
+        // El dueño la sigue viendo.
+        assertThat(leer(foto, beto.getUuid(), Rol.PRESTADOR)).isEqualTo(PNG);
+    }
+
+    @Test
+    void siLaTransaccionVuelveAtrasNoQuedanNiLaFilaNiLosBytes() {
+        Cliente ana = cliente();
+
+        ArchivoResponse subido = transaccion.execute(estado -> {
+            ArchivoResponse r = servicio.subir(ana.getUuid(), Rol.CLIENTE, PNG);
+            assertThat(directorio.resolve(r.uuid().toString())).exists();
+            estado.setRollbackOnly();
+            return r;
+        });
+
+        assertThat(directorio.resolve(subido.uuid().toString())).doesNotExist();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM archivos WHERE uuid = ?", Long.class, subido.uuid()))
+            .isZero();
     }
 
     @Test
