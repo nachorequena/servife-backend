@@ -2,6 +2,7 @@ package ar.edu.iessf.servife.config;
 
 import java.util.List;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -13,9 +14,11 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
+import ar.edu.iessf.servife.identidad.service.Cuentas;
 
 /**
  * Un solo login para los tres roles; el rol viaja en el token (.ai/07-security.md).
@@ -35,8 +38,8 @@ public class SeguridadConfig {
     };
 
     @Bean
-    public SecurityFilterChain filtroDeSeguridad(HttpSecurity http, EscritorDeErrores escritorDeErrores)
-            throws Exception {
+    public SecurityFilterChain filtroDeSeguridad(HttpSecurity http, EscritorDeErrores escritorDeErrores,
+            ObjectProvider<Cuentas> cuentas) throws Exception {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> { })
@@ -53,7 +56,9 @@ public class SeguridadConfig {
                 .accessDeniedHandler(escritorDeErrores::accesoDenegado))
             .exceptionHandling(e -> e
                 .authenticationEntryPoint(escritorDeErrores::noAutenticado)
-                .accessDeniedHandler(escritorDeErrores::accesoDenegado));
+                .accessDeniedHandler(escritorDeErrores::accesoDenegado))
+            // Una cuenta suspendida o dada de baja pierde la sesión en el acto, no cuando vence el token (E4, E15).
+            .addFilterAfter(new FiltroDeCuentaActiva(cuentas, escritorDeErrores), BearerTokenAuthenticationFilter.class);
         return http.build();
     }
 

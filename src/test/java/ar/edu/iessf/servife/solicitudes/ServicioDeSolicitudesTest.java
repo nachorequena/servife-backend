@@ -54,7 +54,9 @@ import ar.edu.iessf.servife.identidad.domain.Cliente;
 import ar.edu.iessf.servife.identidad.domain.EstadoCuenta;
 import ar.edu.iessf.servife.identidad.domain.EstadoValidacion;
 import ar.edu.iessf.servife.identidad.domain.Prestador;
+import ar.edu.iessf.servife.identidad.domain.Gestor;
 import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
+import ar.edu.iessf.servife.identidad.repository.GestorRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 
 /** C1 (POST /solicitudes) de punta a punta contra PostgreSQL real, con un reloj que el test mueve. */
@@ -90,6 +92,11 @@ class ServicioDeSolicitudesTest {
         @Override public Instant instant() { return ahora; }
     }
 
+    /** Un gestor que existe: FiltroDeCuentaActiva corta con 401 los tokens de cuentas inexistentes. */
+    private UUID gestorReal() {
+        return gestores.save(new Gestor("Gestor", UUID.randomUUID() + "@mail.com", "hash")).getUuid();
+    }
+
     @TestConfiguration
     static class RelojDePruebaConfig {
         @Bean
@@ -103,6 +110,7 @@ class ServicioDeSolicitudesTest {
     @Autowired private ObjectMapper json;
     @Autowired private RelojMovil reloj;
     @Autowired private ClienteRepository clientes;
+    @Autowired private GestorRepository gestores;
     @Autowired private PrestadorRepository prestadores;
     @Autowired private TipoServicioRepository tiposServicio;
     @Autowired private DisponibilidadRepository disponibilidad;
@@ -301,8 +309,9 @@ class ServicioDeSolicitudesTest {
 
     @Test
     void prestadorYGestorNoPuedenCrear() throws Exception {
+        UUID gestor = gestorReal();
         for (String rol : List.of("PRESTADOR", "GESTOR")) {
-            mvc.perform(post(API + "/solicitudes").contextPath(API).with(como(beto.getUuid(), rol))
+            mvc.perform(post(API + "/solicitudes").contextPath(API).with(como(rol.equals("GESTOR") ? gestor : beto.getUuid(), rol))
                     .contentType("application/json")
                     .content(json.writeValueAsString(cuerpo(beto.getUuid(), "2026-10-09", List.of()))))
                 .andExpect(status().isForbidden());

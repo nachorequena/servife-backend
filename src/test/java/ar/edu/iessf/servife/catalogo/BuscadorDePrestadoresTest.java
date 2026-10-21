@@ -49,11 +49,17 @@ class BuscadorDePrestadoresTest {
     @Autowired private JdbcTemplate jdbc;
 
     private int contador;
+    /** Cliente real que hace las búsquedas: FiltroDeCuentaActiva corta los tokens de cuentas inexistentes. */
+    private UUID cliente;
 
     @BeforeEach
     void limpiar() {
         jdbc.update("DELETE FROM disponibilidad_prestador");
         jdbc.update("DELETE FROM prestadores");
+        jdbc.update("DELETE FROM clientes WHERE email = 'cliente-b5@mail.com'");
+        cliente = UUID.randomUUID();
+        jdbc.update("INSERT INTO clientes (uuid, nombre_apellido, email, contrasenia) VALUES (?, 'Cliente B5', 'cliente-b5@mail.com', 'hash')",
+            cliente);
     }
 
     // ─── Siembra ────────────────────────────────────────────────────────────
@@ -114,7 +120,7 @@ class BuscadorDePrestadoresTest {
 
     private MockHttpServletRequestBuilder pedido(String consulta) {
         return get(API + "/prestadores" + (consulta.isEmpty() ? "" : "?" + consulta)).contextPath(API)
-            .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim(JwtConfig.CLAIM_ROL, "CLIENTE"))
+            .with(jwt().jwt(j -> j.subject(cliente.toString()).claim(JwtConfig.CLAIM_ROL, "CLIENTE"))
                 .authorities(new SimpleGrantedAuthority("ROLE_CLIENTE")));
     }
 

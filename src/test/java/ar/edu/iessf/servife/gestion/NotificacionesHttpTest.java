@@ -94,8 +94,8 @@ class NotificacionesHttpTest {
         Cliente ana = cliente();
         avisos.avisar(ana, TipoDeAviso.SOLICITUD_NUEVA, "Nueva solicitud", null, null);
 
-        // El token dice PRESTADOR con el uuid de un cliente: no existe esa cuenta, 404.
+        // El token dice PRESTADOR con el uuid de un cliente: no existe esa cuenta, y FiltroDeCuentaActiva corta con 401.
         mvc.perform(get(API + "/notificaciones").contextPath(API).with(como(ana.getUuid(), "PRESTADOR")))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isUnauthorized());
     }
 }
