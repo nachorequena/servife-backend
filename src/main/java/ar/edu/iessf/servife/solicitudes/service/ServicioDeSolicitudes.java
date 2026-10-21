@@ -27,6 +27,7 @@ import ar.edu.iessf.servife.common.paginacion.Paginacion;
 import ar.edu.iessf.servife.common.seguridad.Rol;
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.gestion.service.Avisos;
+import ar.edu.iessf.servife.gestion.service.ServicioDeChats;
 import ar.edu.iessf.servife.gestion.service.TipoDeAviso;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
 import ar.edu.iessf.servife.identidad.domain.Cuenta;
@@ -49,7 +50,7 @@ import ar.edu.iessf.servife.solicitudes.mapper.SolicitudMapper;
 import ar.edu.iessf.servife.solicitudes.repository.SolicitudRepository;
 
 /** Solicitudes de servicio: C1 (crear, CU06), C2 (listar), C3 (ver) y C4 (cambiar estado).
- * C1 corre en una sola transacción: solicitud, imágenes y aviso. */
+ * C1 corre en una sola transacción: solicitud, imágenes, chat (porción 4, D33) y aviso. */
 @Service
 public class ServicioDeSolicitudes {
 
@@ -63,18 +64,20 @@ public class ServicioDeSolicitudes {
     private final DisponibilidadRepository disponibilidad;
     private final ArchivoRepository archivos;
     private final Avisos avisos;
+    private final ServicioDeChats chats;
     private final UsuarioActual usuarioActual;
     private final Clock clock;
 
     public ServicioDeSolicitudes(SolicitudRepository solicitudes, ClienteRepository clientes,
             PrestadorRepository prestadores, DisponibilidadRepository disponibilidad, ArchivoRepository archivos,
-            Avisos avisos, UsuarioActual usuarioActual, Clock clock) {
+            Avisos avisos, ServicioDeChats chats, UsuarioActual usuarioActual, Clock clock) {
         this.solicitudes = solicitudes;
         this.clientes = clientes;
         this.prestadores = prestadores;
         this.disponibilidad = disponibilidad;
         this.archivos = archivos;
         this.avisos = avisos;
+        this.chats = chats;
         this.usuarioActual = usuarioActual;
         this.clock = clock;
     }
@@ -111,6 +114,7 @@ public class ServicioDeSolicitudes {
         for (Archivo imagen : imagenes) {
             vincular(solicitud, imagen);
         }
+        UUID uuidChat = chats.crearPara(solicitud);
 
         avisos.avisar(prestador, TipoDeAviso.SOLICITUD_NUEVA, "Nueva solicitud",
             cliente.getNombreApellido() + " te pidió un servicio para el "
@@ -118,7 +122,8 @@ public class ServicioDeSolicitudes {
             solicitud.getUuid());
 
         // mismo orden que C3 (por id_archivo), no el del pedido
-        return SolicitudMapper.aRespuesta(solicitud, solicitudes.uuidsDeImagenes(solicitud.getId()), Rol.CLIENTE, hoy);
+        return SolicitudMapper.aRespuesta(solicitud, solicitudes.uuidsDeImagenes(solicitud.getId()), Rol.CLIENTE, hoy,
+            uuidChat);
     }
 
     private LocalDate hoyEnArgentina() {
@@ -145,7 +150,8 @@ public class ServicioDeSolicitudes {
     public SolicitudResponse obtener(UUID uuid) {
         Rol rol = usuarioActual.rol();
         Solicitud s = parteDe(uuid, rol);
-        return SolicitudMapper.aRespuesta(s, solicitudes.uuidsDeImagenes(s.getId()), rol, hoyEnArgentina());
+        return SolicitudMapper.aRespuesta(s, solicitudes.uuidsDeImagenes(s.getId()), rol, hoyEnArgentina(),
+            chats.uuidDelChat(s));
     }
 
     /**
@@ -183,7 +189,8 @@ public class ServicioDeSolicitudes {
         // el UPDATE limpió el contexto: se recarga para responder y para avisar con los datos vigentes
         Solicitud actual = solicitudes.findDetalleByUuidAndEliminadoEnIsNull(uuid).orElseThrow();
         avisarCambio(actual, destino, rol);
-        return SolicitudMapper.aRespuesta(actual, solicitudes.uuidsDeImagenes(actual.getId()), rol, hoyEnArgentina());
+        return SolicitudMapper.aRespuesta(actual, solicitudes.uuidsDeImagenes(actual.getId()), rol, hoyEnArgentina(),
+            chats.uuidDelChat(actual));
     }
 
     /** Aviso a la otra parte: quién actuó, qué hizo, y motivo o precio si hay. */
