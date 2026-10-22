@@ -161,6 +161,16 @@ class FlujoDeSolicitudesTest {
         String tokenPrestador = login(emailPrestador);
         String tokenCliente = login(emailCliente);
 
+        // E7: el prestador carga su expediente (D01): DNI y certificación (Gas requiere matrícula)
+        for (String tipo : List.of("DNI_FRENTE", "DNI_DORSO", "CERTIFICACION")) {
+            mvc.perform(multipart(API + "/prestadores/me/documentos")
+                    .file(new MockMultipartFile("archivo", "doc.png", "image/png", PNG))
+                    .contextPath(API)
+                    .param("tipo", tipo).param("declaracionJurada", "true")
+                    .header("Authorization", "Bearer " + tokenPrestador))
+                .andExpect(status().isCreated());
+        }
+
         // E6: el gestor aprueba al prestador
         JsonNode validacion = llamar(patch(API + "/admin/prestadores/" + uuidPrestador + "/validacion"),
             tokenGestor, 200, Map.of("decision", "APROBAR"));

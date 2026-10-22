@@ -46,6 +46,13 @@ class PerfilYValidacionConcurrentesTest {
             VALUES (?, 'Pedro Gas', 'concurrente@mail.com', 'hash', (SELECT id_tipo_servicio FROM tipos_servicio WHERE nombre = 'Gas'),
                 'PENDIENTE', 'ACTIVA')
             """, uuid);
+        // Expediente completo (D01): DNI, certificación (Gas requiere matrícula) y declaración jurada.
+        jdbc.update("UPDATE prestadores SET declaracion_jurada_en = now() WHERE uuid = ?", uuid);
+        for (String doc : new String[] {"DNI_FRENTE", "DNI_DORSO", "CERTIFICACION"}) {
+            jdbc.update("INSERT INTO documentos_validacion (id_prestador, tipo, ruta, mime, bytes)"
+                + " VALUES ((SELECT id_prestador FROM prestadores WHERE uuid = ?), ?, ?, 'image/png', 10)",
+                uuid, doc, UUID.randomUUID().toString());
+        }
         UUID gestor = UUID.randomUUID();
         jdbc.update("INSERT INTO gestores (uuid, nombre_apellido, email, contrasenia) VALUES (?, 'Gestor', 'gestor-concurrente@mail.com', 'hash')",
             gestor);
@@ -67,6 +74,7 @@ class PerfilYValidacionConcurrentesTest {
         assertThat(jdbc.queryForObject("SELECT zona FROM prestadores WHERE uuid = ?", String.class, uuid))
             .isEqualTo("Centro");
         jdbc.update("DELETE FROM notificaciones");
+        jdbc.update("DELETE FROM documentos_validacion");
         jdbc.update("DELETE FROM prestadores WHERE uuid = ?", uuid);
         jdbc.update("DELETE FROM gestores WHERE uuid = ?", gestor);
     }

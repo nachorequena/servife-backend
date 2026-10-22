@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +16,7 @@ import org.springframework.data.repository.query.Param;
 import ar.edu.iessf.servife.catalogo.domain.TipoServicio;
 import ar.edu.iessf.servife.identidad.domain.EstadoValidacion;
 import ar.edu.iessf.servife.identidad.domain.Prestador;
+import jakarta.persistence.LockModeType;
 
 public interface PrestadorRepository extends JpaRepository<Prestador, Long> {
 
@@ -25,6 +27,14 @@ public interface PrestadorRepository extends JpaRepository<Prestador, Long> {
     boolean existsByEmail(String email);
 
     Optional<Prestador> findByUuidAndEliminadoEnIsNull(UUID uuid);
+
+    /**
+     * El prestador no dado de baja, con la fila bloqueada hasta el fin de la transacción: serializa la carga
+     * de documentos (E7) con la decisión del gestor (E6) sobre el mismo prestador.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Prestador p where p.uuid = :uuid and p.eliminadoEn is null")
+    Optional<Prestador> bloquearPorUuid(@Param("uuid") UUID uuid);
 
     /** Si hay prestadores no dados de baja (de cualquier estado) con ese tipo de servicio. */
     boolean existsByTipoServicioAndEliminadoEnIsNull(TipoServicio tipoServicio);

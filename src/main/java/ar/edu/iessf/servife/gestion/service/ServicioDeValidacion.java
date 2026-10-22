@@ -22,8 +22,9 @@ import ar.edu.iessf.servife.identidad.repository.GestorRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 
 /**
- * E5 y E6 · CU14 (versión mínima, sin documentos): lista los prestadores pendientes y deja que el
- * gestor los apruebe o rechace, avisándoles y dejando quién decidió, cuándo y con qué motivo (V9).
+ * E5 y E6 · CU14: lista los prestadores pendientes y deja que el gestor los apruebe o rechace,
+ * avisándoles y dejando quién decidió, cuándo y con qué motivo (V9). Aprobar exige el expediente (D01);
+ * decidir lo cierra (ServicioDeDocumentos).
  * La suspensión de la cuenta no interviene: el gestor decide la validación de forma independiente.
  */
 @Service
@@ -31,12 +32,15 @@ public class ServicioDeValidacion {
 
     private final PrestadorRepository prestadores;
     private final GestorRepository gestores;
+    private final ServicioDeDocumentos documentos;
     private final Avisos avisos;
     private final Clock reloj;
 
-    public ServicioDeValidacion(PrestadorRepository prestadores, GestorRepository gestores, Avisos avisos, Clock reloj) {
+    public ServicioDeValidacion(PrestadorRepository prestadores, GestorRepository gestores, ServicioDeDocumentos documentos,
+            Avisos avisos, Clock reloj) {
         this.prestadores = prestadores;
         this.gestores = gestores;
+        this.documentos = documentos;
         this.avisos = avisos;
         this.reloj = reloj;
     }
@@ -55,11 +59,13 @@ public class ServicioDeValidacion {
     /**
      * Aprueba o rechaza a un prestador PENDIENTE y le deja un aviso en la misma transacción. El motivo
      * se guarda con cualquiera de las dos decisiones, pero solo el de un rechazo llega al prestador.
-     * 404 si no existe o está dado de baja; 409 VALIDACION_YA_RESUELTA si ya no está pendiente.
+     * 404 si no existe o está dado de baja; 409 VALIDACION_YA_RESUELTA si ya no está pendiente; al aprobar,
+     * 409 EXPEDIENTE_INCOMPLETO o FALTA_MATRICULA (D01). La fila queda bloqueada, así no se cruza con una
+     * carga de documentos (E7).
      */
     @Transactional
     public ValidacionResponse decidir(UUID uuid, Decision decision, String motivo, UUID uuidGestor) {
-        Prestador existente = prestadores.findByUuidAndEliminadoEnIsNull(uuid)
+        Prestador existente = prestadores.bloquearPorUuid(uuid)
             .orElseThrow(() -> new RecursoNoEncontradoException("No existe."));
         Long gestor = gestores.findByUuidAndEliminadoEnIsNull(uuidGestor)
             .orElseThrow(() -> new IllegalStateException("El gestor autenticado no existe")).getId();
@@ -67,9 +73,17 @@ public class ServicioDeValidacion {
         EstadoValidacion nuevo = aprobar ? EstadoValidacion.APROBADO : EstadoValidacion.RECHAZADO;
         String motivoLimpio = motivo == null || motivo.isBlank() ? null : motivo.trim();
 
-        if (prestadores.resolverSiPendiente(existente.getId(), nuevo, gestor, motivoLimpio, reloj.instant()) != 1) {
-            throw new ConflictoException("VALIDACION_YA_RESUELTA", "Ese prestador ya fue revisado.");
+        if (existente.getEstadoValidacion() != EstadoValidacion.PENDIENTE) {
+            throw yaResuelta();
         }
+        if (aprobar) {
+            documentos.exigirParaAprobar(existente);
+        }
+        Long idPrestador = existente.getId();
+        if (prestadores.resolverSiPendiente(idPrestador, nuevo, gestor, motivoLimpio, reloj.instant()) != 1) {
+            throw yaResuelta();
+        }
+        documentos.cerrarExpediente(idPrestador, nuevo);
 
         if (aprobar) {
             avisos.avisar(existente, TipoDeAviso.PERFIL_APROBADO, "Tu perfil fue aprobado",
@@ -79,6 +93,10 @@ public class ServicioDeValidacion {
                 "Tu perfil no fue aprobado." + (motivoLimpio != null ? " Motivo: " + motivoLimpio : ""), null);
         }
         return new ValidacionResponse(uuid, nuevo);
+    }
+
+    private static ConflictoException yaResuelta() {
+        return new ConflictoException("VALIDACION_YA_RESUELTA", "Ese prestador ya fue revisado.");
     }
 
     private static PrestadorPendienteResponse aRespuesta(Prestador p) {

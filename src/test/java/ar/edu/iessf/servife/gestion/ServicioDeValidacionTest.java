@@ -60,6 +60,7 @@ class ServicioDeValidacionTest {
     void limpiar() {
         jdbc.update("DELETE FROM notificaciones");
         jdbc.update("DELETE FROM disponibilidad_prestador");
+        jdbc.update("DELETE FROM documentos_validacion");
         jdbc.update("DELETE FROM prestadores");
         jdbc.update("DELETE FROM gestores WHERE email LIKE 'gestor-e6-%'");
         gestor = gestor("gestor-e6-a@mail.com");
@@ -96,8 +97,31 @@ class ServicioDeValidacionTest {
             """, prestador);
     }
 
+    /** Pendiente con el expediente completo (Gas requiere matrícula): se puede aprobar. */
     private UUID pendiente(String nombre, int minutosAtras) {
-        return prestador(nombre, "PENDIENTE", "ACTIVA", false, minutosAtras);
+        UUID uuid = prestador(nombre, "PENDIENTE", "ACTIVA", false, minutosAtras);
+        expediente(uuid, true, "DNI_FRENTE", "DNI_DORSO", "CERTIFICACION");
+        return uuid;
+    }
+
+    /** Filas de documentos_validacion sin archivo en disco (borrar uno que no existe no falla) y la declaración jurada. */
+    private void expediente(UUID prestador, boolean declaracionJurada, String... tipos) {
+        if (declaracionJurada) {
+            jdbc.update("UPDATE prestadores SET declaracion_jurada_en = now() WHERE uuid = ?", prestador);
+        }
+        for (String tipo : tipos) {
+            jdbc.update("""
+                INSERT INTO documentos_validacion (id_prestador, tipo, ruta, mime, bytes)
+                VALUES ((SELECT id_prestador FROM prestadores WHERE uuid = ?), ?, ?, 'image/png', 10)
+                """, prestador, tipo, UUID.randomUUID().toString());
+        }
+    }
+
+    private List<Map<String, Object>> documentosDe(UUID prestador) {
+        return jdbc.queryForList("""
+            SELECT d.tipo, d.estado, d.eliminado_en IS NOT NULL AS de_baja FROM documentos_validacion d
+            JOIN prestadores p ON p.id_prestador = d.id_prestador WHERE p.uuid = ? ORDER BY d.id_documento
+            """, prestador);
     }
 
     private Pagina<PrestadorPendienteResponse> pendientes() {
@@ -291,5 +315,63 @@ class ServicioDeValidacionTest {
         }
         assertThat(avisosDe(uuid)).hasSize(1);
         assertThat(auditoria(uuid).get("gestor")).isIn(gestor, otroGestor);
+    }
+    @Test
+    void aprobarSinDniODeclaracionJuradaEs409ExpedienteIncompleto() {
+        UUID sinDorso = prestador("Sin dorso", "PENDIENTE", "ACTIVA", false, 10);
+        expediente(sinDorso, true, "DNI_FRENTE", "CERTIFICACION");
+        UUID sinDeclaracion = prestador("Sin declaración", "PENDIENTE", "ACTIVA", false, 10);
+        expediente(sinDeclaracion, false, "DNI_FRENTE", "DNI_DORSO", "CERTIFICACION");
+
+        for (UUID uuid : List.of(sinDorso, sinDeclaracion)) {
+            assertThatThrownBy(() -> decidir(uuid, Decision.APROBAR, null))
+                .isInstanceOfSatisfying(ConflictoException.class, e -> assertThat(e.getCodigo()).isEqualTo("EXPEDIENTE_INCOMPLETO"));
+            assertThat(jdbc.queryForObject("SELECT estado_validacion FROM prestadores WHERE uuid = ?", String.class, uuid))
+                .isEqualTo("PENDIENTE");
+            assertThat(avisosDe(uuid)).isEmpty();
+        }
+    }
+
+    @Test
+    void aprobarUnRubroConMatriculaSinCertificacionEs409YSinMatriculaNoLaPide() {
+        UUID gasista = prestador("Gasista", "PENDIENTE", "ACTIVA", false, 10);
+        expediente(gasista, true, "DNI_FRENTE", "DNI_DORSO");
+        UUID plomero = prestador("Plomero", "PENDIENTE", "ACTIVA", false, 10);
+        jdbc.update("UPDATE prestadores SET id_tipo_servicio = (SELECT id_tipo_servicio FROM tipos_servicio WHERE nombre = 'Plomería')"
+            + " WHERE uuid = ?", plomero);
+        expediente(plomero, true, "DNI_FRENTE", "DNI_DORSO");
+
+        assertThatThrownBy(() -> decidir(gasista, Decision.APROBAR, null))
+            .isInstanceOfSatisfying(ConflictoException.class, e -> {
+                assertThat(e.getCodigo()).isEqualTo("FALTA_MATRICULA");
+                assertThat(e.getMessage()).contains("Gas");
+            });
+        assertThat(decidir(plomero, Decision.APROBAR, null).estadoValidacion()).isEqualTo(EstadoValidacion.APROBADO);
+    }
+
+    @Test
+    void rechazarNoExigeElExpediente() {
+        UUID vacio = prestador("Sin nada", "PENDIENTE", "ACTIVA", false, 10);
+        assertThat(decidir(vacio, Decision.RECHAZAR, "Sin documentos").estadoValidacion()).isEqualTo(EstadoValidacion.RECHAZADO);
+    }
+
+    @Test
+    void aprobarCierraElExpedienteYQuedanSoloLasCertificacionesComoDato() {
+        UUID uuid = pendiente("Aprobado", 10);
+
+        decidir(uuid, Decision.APROBAR, null);
+
+        assertThat(documentosDe(uuid)).extracting(d -> d.get("tipo") + " " + d.get("estado") + " " + d.get("de_baja"))
+            .containsExactly("DNI_FRENTE APROBADO true", "DNI_DORSO APROBADO true", "CERTIFICACION APROBADO false");
+    }
+
+    @Test
+    void rechazarDaDeBajaTodoElExpediente() {
+        UUID uuid = pendiente("Rechazado", 10);
+
+        decidir(uuid, Decision.RECHAZAR, "Fotos ilegibles");
+
+        assertThat(documentosDe(uuid)).extracting(d -> d.get("estado") + " " + d.get("de_baja"))
+            .containsOnly("RECHAZADO true");
     }
 }

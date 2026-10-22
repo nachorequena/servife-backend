@@ -42,11 +42,14 @@ services:
       GESTOR_INICIAL_CONTRASENIA: ${GESTOR_INICIAL_CONTRASENIA:-}
       GESTOR_INICIAL_NOMBRE: ${GESTOR_INICIAL_NOMBRE:-}
       ARCHIVOS_DIR: /data/archivos
+      DOCUMENTOS_DIR: /data/documentos
     volumes:
       - archivos:/data/archivos
+      - documentos:/data/documentos
     ports:
       - "8080:8080"
 
 volumes:
   datos-db:
   archivos:
+  documentos:

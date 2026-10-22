@@ -96,6 +96,10 @@ public class Prestador extends EntidadBase implements Cuenta {
     @Column(name = "motivo_validacion")
     private String motivoValidacion;
 
+    /** Cuándo aceptó la declaración jurada de antecedentes (D01, V10); se tilda al cargar documentos (E7). */
+    @Column(name = "declaracion_jurada_en")
+    private Instant declaracionJuradaEn;
+
     /** Solo lectura: lo calcula el módulo de valoraciones. */
     @Column(name = "valoracion_promedio", precision = 2, scale = 1, insertable = false, updatable = false)
     private BigDecimal valoracionPromedio;
@@ -255,6 +259,17 @@ public class Prestador extends EntidadBase implements Cuenta {
 
     public String getMotivoValidacion() {
         return motivoValidacion;
+    }
+
+    public Instant getDeclaracionJuradaEn() {
+        return declaracionJuradaEn;
+    }
+
+    /** Guarda la primera aceptación de la declaración jurada; las siguientes no la cambian. */
+    public void aceptarDeclaracionJurada(Instant ahora) {
+        if (declaracionJuradaEn == null) {
+            declaracionJuradaEn = ahora;
+        }
     }
 
     @Override
