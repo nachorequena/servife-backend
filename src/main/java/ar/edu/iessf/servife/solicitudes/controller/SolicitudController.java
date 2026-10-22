@@ -43,7 +43,7 @@ public class SolicitudController {
         this.servicio = servicio;
     }
 
-    /** C1 · POST /solicitudes · CU06 · Fecha deseada, hora preferida, dirección, descripción e imagenIds ya subidas (D7). Queda PENDIENTE y habilita el chat (D03). 201 con Location. */
+    /** C1 · POST /solicitudes · CU06 · Fecha deseada, hora preferida, dirección, descripción e imagenIds ya subidas (D7). Queda PENDIENTE y crea su chat (D33); C3 lo devuelve como uuidChat. 201 con Location. */
     @PreAuthorize("hasRole('CLIENTE')")
     @PostMapping
     public ResponseEntity<SolicitudResponse> crear(@Valid @RequestBody CrearSolicitudRequest pedido) {

@@ -9,9 +9,10 @@ import ar.edu.iessf.servife.common.seguridad.Rol;
 /**
  * Tabla explícita (acción, origen) → (destino, roles permitidos) de 02-context. Java puro, sin Spring.
  * <p>
- * No incluye la regla de fechas de INICIAR (solo desde la fecha deseada, en hora de Argentina):
- * necesita el Clock y fecha_deseada, así que la verifica el servicio (Task 18) antes de aplicar la
- * transición. FINALIZADA → VALORADA y los casos de D07 quedan para el Sprint 4.
+ * No incluye la regla de fechas de INICIAR, CONFIRMAR_REALIZADO y NO_SE_PRESENTO (solo desde la fecha
+ * deseada, en hora de Argentina; ver AccionSobreSolicitud.requiereLlegarLaFecha): necesita el Clock y
+ * fecha_deseada, así que la verifica el servicio antes de aplicar la transición. FINALIZADA → VALORADA
+ * no es una acción de C4: la dispara la valoración (D1) con ServicioDeSolicitudes.marcarComoValorada.
  */
 public final class MaquinaDeEstados {
 
@@ -31,7 +32,13 @@ public final class MaquinaDeEstados {
         new Transicion(AccionSobreSolicitud.INICIAR, EstadoSolicitud.ACEPTADA, EstadoSolicitud.EN_CURSO,
             Set.of(Rol.PRESTADOR)),
         new Transicion(AccionSobreSolicitud.FINALIZAR, EstadoSolicitud.EN_CURSO, EstadoSolicitud.FINALIZADA,
-            Set.of(Rol.PRESTADOR)));
+            Set.of(Rol.PRESTADOR)),
+        new Transicion(AccionSobreSolicitud.CONFIRMAR_REALIZADO, EstadoSolicitud.ACEPTADA, EstadoSolicitud.FINALIZADA,
+            Set.of(Rol.CLIENTE)),
+        new Transicion(AccionSobreSolicitud.CONFIRMAR_REALIZADO, EstadoSolicitud.EN_CURSO, EstadoSolicitud.FINALIZADA,
+            Set.of(Rol.CLIENTE)),
+        new Transicion(AccionSobreSolicitud.NO_SE_PRESENTO, EstadoSolicitud.ACEPTADA, EstadoSolicitud.CANCELADA,
+            Set.of(Rol.CLIENTE)));
 
     private MaquinaDeEstados() {
     }
