@@ -1,6 +1,7 @@
 package ar.edu.iessf.servife.solicitudes;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.not;
@@ -29,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +42,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
@@ -53,6 +58,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import ar.edu.iessf.servife.catalogo.domain.TipoServicio;
 import ar.edu.iessf.servife.catalogo.repository.TipoServicioRepository;
+import ar.edu.iessf.servife.common.error.ConflictoException;
+import ar.edu.iessf.servife.common.error.RecursoNoEncontradoException;
 import ar.edu.iessf.servife.config.JwtConfig;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
 import ar.edu.iessf.servife.identidad.domain.EstadoValidacion;
@@ -65,6 +72,7 @@ import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
 import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
 import ar.edu.iessf.servife.solicitudes.domain.SolicitudDePrueba;
 import ar.edu.iessf.servife.solicitudes.repository.SolicitudRepository;
+import ar.edu.iessf.servife.solicitudes.service.ServicioDeSolicitudes;
 
 /** C4 (PATCH /solicitudes/{uuid}/estado) contra PostgreSQL real, con avisos a la contraparte. */
 @SpringBootTest(properties = "servife.jwt.secreto=secreto-de-prueba-de-al-menos-32-caracteres")
@@ -101,6 +109,7 @@ class CambioDeEstadoTest {
     @Autowired private PrestadorRepository prestadores;
     @Autowired private TipoServicioRepository tiposServicio;
     @Autowired private SolicitudRepository solicitudes;
+    @Autowired private ServicioDeSolicitudes servicio;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private DataSource dataSource;
 
@@ -422,6 +431,170 @@ class CambioDeEstadoTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    // ---- D07: NO_SE_PRESENTO, CONFIRMAR_REALIZADO y FINALIZADA → VALORADA ----
+
+    @Test
+    void elClienteMarcaQueElPrestadorNoSePresentoYQuedaCanceladaConMotivoFijo() throws Exception {
+        Solicitud s = solicitud(EstadoSolicitud.ACEPTADA);
+
+        patchear(s, comoAna(), "{\"accion\":\"NO_SE_PRESENTO\"}")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("CANCELADA"))
+            .andExpect(jsonPath("$.motivo").value("El prestador no se presentó"))
+            .andExpect(jsonPath("$.canceladaPor").value("CLIENTE"))
+            .andExpect(jsonPath("$.accionesDisponibles").isEmpty())
+            .andExpect(jsonPath("$.prestador.telefono").value(nullValue()));
+
+        assertThat(estadoDe(s)).isEqualTo("CANCELADA");
+        assertThat(avisosDe("PRESTADOR", beto.getId())).singleElement().satisfies(a ->
+            assertThat(a).containsEntry("tipo", "SOLICITUD_CANCELADA").containsEntry("titulo", "Cancelaron la solicitud")
+                .containsEntry("cuerpo", "Ana Pérez indicó que no te presentaste a la solicitud del 09/10/2026.")
+                .containsEntry("uuid_solicitud", s.getUuid()));
+        assertThat(avisosDe("CLIENTE", ana.getId())).isEmpty();
+    }
+
+    @Test
+    void noSePresentoNoSeOfreceNiSeAceptaAntesDeLaFecha() throws Exception {
+        Solicitud futura = solicitud(EstadoSolicitud.ACEPTADA, LocalDate.of(2026, 10, 10));
+
+        mvc.perform(get(API + "/solicitudes/" + futura.getUuid()).contextPath(API).with(comoAna()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accionesDisponibles", not(hasItems("NO_SE_PRESENTO", "CONFIRMAR_REALIZADO"))))
+            .andExpect(jsonPath("$.accionesDisponibles", hasItem("CANCELAR")));
+        patchear(futura, comoAna(), "{\"accion\":\"NO_SE_PRESENTO\"}")
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.codigo").value("TODAVIA_NO_ES_LA_FECHA"));
+        patchear(futura, comoAna(), "{\"accion\":\"CONFIRMAR_REALIZADO\"}")
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.codigo").value("TODAVIA_NO_ES_LA_FECHA"));
+        assertThat(estadoDe(futura)).isEqualTo("ACEPTADA");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notificaciones", Integer.class)).isZero();
+    }
+
+    @Test
+    void elDiaDeLaFechaElClienteVeLasAccionesDeCierre() throws Exception {
+        Solicitud deHoy = solicitud(EstadoSolicitud.ACEPTADA, LocalDate.of(2026, 10, 9));
+        mvc.perform(get(API + "/solicitudes/" + deHoy.getUuid()).contextPath(API).with(comoAna()))
+            .andExpect(jsonPath("$.accionesDisponibles", hasItems("CANCELAR", "CONFIRMAR_REALIZADO", "NO_SE_PRESENTO")));
+        mvc.perform(get(API + "/solicitudes/" + deHoy.getUuid()).contextPath(API).with(comoBeto()))
+            .andExpect(jsonPath("$.accionesDisponibles", not(hasItems("CONFIRMAR_REALIZADO", "NO_SE_PRESENTO"))));
+    }
+
+    @Test
+    void noSePresentoSoloDesdeAceptadaYSoloDelCliente() throws Exception {
+        patchear(solicitud(EstadoSolicitud.EN_CURSO), comoAna(), "{\"accion\":\"NO_SE_PRESENTO\"}")
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+        patchear(solicitud(EstadoSolicitud.FINALIZADA), comoAna(), "{\"accion\":\"NO_SE_PRESENTO\"}")
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+        patchear(solicitud(EstadoSolicitud.VALORADA), comoAna(), "{\"accion\":\"NO_SE_PRESENTO\"}")
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+        patchear(solicitud(EstadoSolicitud.ACEPTADA), comoBeto(), "{\"accion\":\"NO_SE_PRESENTO\"}")
+            .andExpect(status().isForbidden());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notificaciones", Integer.class)).isZero();
+    }
+
+    @Test
+    void noSePresentoNoAceptaMotivoDelCliente() throws Exception {
+        Solicitud s = solicitud(EstadoSolicitud.ACEPTADA);
+        patchear(s, comoAna(), "{\"accion\":\"NO_SE_PRESENTO\",\"motivo\":\"x\"}")
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errores[0].campo").value("motivo"));
+        assertThat(estadoDe(s)).isEqualTo("ACEPTADA");
+    }
+
+    @Test
+    void elClienteConfirmaQueSeRealizoDesdeAceptadaOEnCursoYAvisaAlPrestador() throws Exception {
+        Solicitud desdeAceptada = solicitud(EstadoSolicitud.ACEPTADA);
+        patchear(desdeAceptada, comoAna(), "{\"accion\":\"CONFIRMAR_REALIZADO\"}")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("FINALIZADA"))
+            .andExpect(jsonPath("$.motivo").value(nullValue()))
+            .andExpect(jsonPath("$.canceladaPor").value(nullValue()))
+            .andExpect(jsonPath("$.cliente.telefono").value("1111"))
+            .andExpect(jsonPath("$.prestador.telefono").value("2222"));
+
+        Solicitud desdeEnCurso = solicitud(EstadoSolicitud.EN_CURSO);
+        patchear(desdeEnCurso, comoAna(), "{\"accion\":\"CONFIRMAR_REALIZADO\"}")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("FINALIZADA"));
+
+        List<Map<String, Object>> avisos = avisosDe("PRESTADOR", beto.getId());
+        assertThat(avisos).hasSize(2);
+        assertThat(avisos.get(0)).containsEntry("tipo", "SOLICITUD_FINALIZADA").containsEntry("titulo", "Terminó el trabajo")
+            .containsEntry("cuerpo", "Ana Pérez dio por realizada la solicitud del 09/10/2026.");
+        assertThat(avisosDe("CLIENTE", ana.getId())).isEmpty();
+    }
+
+    @Test
+    void confirmarRealizadoSoloDesdeAceptadaOEnCursoYSoloDelCliente() throws Exception {
+        patchear(solicitud(EstadoSolicitud.PENDIENTE), comoAna(), "{\"accion\":\"CONFIRMAR_REALIZADO\"}")
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+        patchear(solicitud(EstadoSolicitud.FINALIZADA), comoAna(), "{\"accion\":\"CONFIRMAR_REALIZADO\"}")
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+        patchear(solicitud(EstadoSolicitud.CANCELADA), comoAna(), "{\"accion\":\"CONFIRMAR_REALIZADO\"}")
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+        patchear(solicitud(EstadoSolicitud.EN_CURSO), comoBeto(), "{\"accion\":\"CONFIRMAR_REALIZADO\"}")
+            .andExpect(status().isForbidden());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notificaciones", Integer.class)).isZero();
+    }
+
+    @Test
+    void unaSolicitudFinalizadaPorElClienteSePuedeValorar() throws Exception {
+        Solicitud s = solicitud(EstadoSolicitud.ACEPTADA);
+        patchear(s, comoAna(), "{\"accion\":\"CONFIRMAR_REALIZADO\"}").andExpect(status().isOk());
+
+        comoUsuario(ana.getUuid(), "CLIENTE");
+        servicio.marcarComoValorada(s.getUuid());
+
+        assertThat(estadoDe(s)).isEqualTo("VALORADA");
+    }
+
+    @Test
+    void marcarComoValoradaSoloDesdeFinalizadaYUnaSolaVez() {
+        Solicitud finalizada = solicitud(EstadoSolicitud.FINALIZADA);
+        comoUsuario(ana.getUuid(), "CLIENTE");
+
+        servicio.marcarComoValorada(finalizada.getUuid());
+        assertThat(estadoDe(finalizada)).isEqualTo("VALORADA");
+        assertThatThrownBy(() -> servicio.marcarComoValorada(finalizada.getUuid()))
+            .isInstanceOfSatisfying(ConflictoException.class, e -> assertThat(e.getCodigo()).isEqualTo("TRANSICION_INVALIDA"));
+
+        for (EstadoSolicitud estado : List.of(EstadoSolicitud.PENDIENTE, EstadoSolicitud.ACEPTADA,
+                EstadoSolicitud.EN_CURSO, EstadoSolicitud.CANCELADA, EstadoSolicitud.RECHAZADA)) {
+            Solicitud otra = solicitud(estado);
+            assertThatThrownBy(() -> servicio.marcarComoValorada(otra.getUuid()))
+                .isInstanceOf(ConflictoException.class);
+            assertThat(estadoDe(otra)).isEqualTo(estado.name());
+        }
+    }
+
+    @Test
+    void marcarComoValoradaEsDelClienteDeLaSolicitud() {
+        Solicitud s = solicitud(EstadoSolicitud.FINALIZADA);
+        Cliente otraCliente = clientes.save(new Cliente("Otra", UUID.randomUUID() + "@mail.com", "hash"));
+
+        comoUsuario(otraCliente.getUuid(), "CLIENTE");
+        assertThatThrownBy(() -> servicio.marcarComoValorada(s.getUuid()))
+            .isInstanceOf(RecursoNoEncontradoException.class);
+        comoUsuario(beto.getUuid(), "PRESTADOR");
+        assertThatThrownBy(() -> servicio.marcarComoValorada(s.getUuid()))
+            .isInstanceOf(RecursoNoEncontradoException.class);
+        assertThat(estadoDe(s)).isEqualTo("FINALIZADA");
+    }
+
+    /** Simula la sesión del usuario para llamar a un service directo (sin pasar por MockMvc). */
+    private static void comoUsuario(UUID uuid, String rol) {
+        Jwt jwt = Jwt.withTokenValue("prueba").header("alg", "none").subject(uuid.toString())
+            .claim(JwtConfig.CLAIM_ROL, rol).build();
+        SecurityContextHolder.getContext().setAuthentication(
+            new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority("ROLE_" + rol))));
+    }
+
+    @AfterEach
+    void limpiarSesion() {
+        SecurityContextHolder.clearContext();
     }
 
     private String estadoDe(Solicitud s) {
