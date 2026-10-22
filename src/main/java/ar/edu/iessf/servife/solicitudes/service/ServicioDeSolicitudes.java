@@ -27,6 +27,7 @@ import ar.edu.iessf.servife.common.paginacion.Paginacion;
 import ar.edu.iessf.servife.common.seguridad.Rol;
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.gestion.service.Avisos;
+import ar.edu.iessf.servife.gestion.service.ServicioDeChats;
 import ar.edu.iessf.servife.gestion.service.TipoDeAviso;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
 import ar.edu.iessf.servife.identidad.domain.Cuenta;
@@ -49,12 +50,14 @@ import ar.edu.iessf.servife.solicitudes.mapper.SolicitudMapper;
 import ar.edu.iessf.servife.solicitudes.repository.SolicitudRepository;
 
 /** Solicitudes de servicio: C1 (crear, CU06), C2 (listar), C3 (ver) y C4 (cambiar estado).
- * C1 corre en una sola transacción: solicitud, imágenes y aviso. */
+ * C1 corre en una sola transacción: solicitud, imágenes, chat (porción 4, D33) y aviso. */
 @Service
 public class ServicioDeSolicitudes {
 
     private static final ZoneId ARGENTINA = ZoneId.of("America/Argentina/Buenos_Aires");
     private static final int LARGO_DESCRIPCION_EN_LISTA = 140;
+    /** Motivo que guarda NO_SE_PRESENTO (D07); el cliente no lo escribe. */
+    static final String MOTIVO_NO_SE_PRESENTO = "El prestador no se presentó";
     private static final DateTimeFormatter DIA_MES_ANIO = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final SolicitudRepository solicitudes;
@@ -63,18 +66,20 @@ public class ServicioDeSolicitudes {
     private final DisponibilidadRepository disponibilidad;
     private final ArchivoRepository archivos;
     private final Avisos avisos;
+    private final ServicioDeChats chats;
     private final UsuarioActual usuarioActual;
     private final Clock clock;
 
     public ServicioDeSolicitudes(SolicitudRepository solicitudes, ClienteRepository clientes,
             PrestadorRepository prestadores, DisponibilidadRepository disponibilidad, ArchivoRepository archivos,
-            Avisos avisos, UsuarioActual usuarioActual, Clock clock) {
+            Avisos avisos, ServicioDeChats chats, UsuarioActual usuarioActual, Clock clock) {
         this.solicitudes = solicitudes;
         this.clientes = clientes;
         this.prestadores = prestadores;
         this.disponibilidad = disponibilidad;
         this.archivos = archivos;
         this.avisos = avisos;
+        this.chats = chats;
         this.usuarioActual = usuarioActual;
         this.clock = clock;
     }
@@ -111,6 +116,7 @@ public class ServicioDeSolicitudes {
         for (Archivo imagen : imagenes) {
             vincular(solicitud, imagen);
         }
+        UUID uuidChat = chats.crearPara(solicitud);
 
         avisos.avisar(prestador, TipoDeAviso.SOLICITUD_NUEVA, "Nueva solicitud",
             cliente.getNombreApellido() + " te pidió un servicio para el "
@@ -118,7 +124,8 @@ public class ServicioDeSolicitudes {
             solicitud.getUuid());
 
         // mismo orden que C3 (por id_archivo), no el del pedido
-        return SolicitudMapper.aRespuesta(solicitud, solicitudes.uuidsDeImagenes(solicitud.getId()), Rol.CLIENTE, hoy);
+        return SolicitudMapper.aRespuesta(solicitud, solicitudes.uuidsDeImagenes(solicitud.getId()), Rol.CLIENTE, hoy,
+            uuidChat);
     }
 
     private LocalDate hoyEnArgentina() {
@@ -145,7 +152,8 @@ public class ServicioDeSolicitudes {
     public SolicitudResponse obtener(UUID uuid) {
         Rol rol = usuarioActual.rol();
         Solicitud s = parteDe(uuid, rol);
-        return SolicitudMapper.aRespuesta(s, solicitudes.uuidsDeImagenes(s.getId()), rol, hoyEnArgentina());
+        return SolicitudMapper.aRespuesta(s, solicitudes.uuidsDeImagenes(s.getId()), rol, hoyEnArgentina(),
+            chats.uuidDelChat(s));
     }
 
     /**
@@ -161,7 +169,7 @@ public class ServicioDeSolicitudes {
         EstadoSolicitud origen = s.getEstado();
         EstadoSolicitud destino = MaquinaDeEstados.destino(origen, accion, rol);
 
-        if (accion == AccionSobreSolicitud.INICIAR && s.getFechaDeseada() != null
+        if (accion.requiereLlegarLaFecha() && s.getFechaDeseada() != null
                 && hoyEnArgentina().isBefore(s.getFechaDeseada())) {
             throw new ConflictoException("TODAVIA_NO_ES_LA_FECHA", "Todavía no llegó la fecha del trabajo.");
         }
@@ -174,20 +182,47 @@ public class ServicioDeSolicitudes {
             throw new ValidacionException("motivo", "solo se puede indicar al rechazar o cancelar");
         }
 
+        if (accion == AccionSobreSolicitud.NO_SE_PRESENTO) {
+            motivo = MOTIVO_NO_SE_PRESENTO;
+        }
+
         int filas = solicitudes.cambiarEstado(s.getId(), origen, destino, motivo,
-            accion == AccionSobreSolicitud.CANCELAR ? rol : null, pedido.precioAcordado(), clock.instant());
+            destino == EstadoSolicitud.CANCELADA ? rol : null, pedido.precioAcordado(), clock.instant());
         if (filas == 0) {
             throw new ConflictoException("TRANSICION_INVALIDA", "La solicitud cambió mientras tanto. Recargala.");
         }
 
         // el UPDATE limpió el contexto: se recarga para responder y para avisar con los datos vigentes
         Solicitud actual = solicitudes.findDetalleByUuidAndEliminadoEnIsNull(uuid).orElseThrow();
-        avisarCambio(actual, destino, rol);
-        return SolicitudMapper.aRespuesta(actual, solicitudes.uuidsDeImagenes(actual.getId()), rol, hoyEnArgentina());
+        avisarCambio(actual, accion, destino, rol);
+        return SolicitudMapper.aRespuesta(actual, solicitudes.uuidsDeImagenes(actual.getId()), rol, hoyEnArgentina(),
+            chats.uuidDelChat(actual));
+    }
+
+    /**
+     * FINALIZADA → VALORADA (D07). No es una acción de C4: la llama la valoración (D1, porción 3) en su
+     * misma transacción, después de guardar la reseña. El usuario actual tiene que ser el cliente de la
+     * solicitud (si no, 404) y la solicitud tiene que estar FINALIZADA; así una solicitud se valora una
+     * sola vez. No manda aviso.
+     */
+    @Transactional
+    public void marcarComoValorada(UUID uuid) {
+        if (usuarioActual.rol() != Rol.CLIENTE) {
+            throw new RecursoNoEncontradoException("No existe.");
+        }
+        Solicitud s = parteDe(uuid, Rol.CLIENTE);
+        if (s.getEstado() != EstadoSolicitud.FINALIZADA) {
+            throw new ConflictoException("TRANSICION_INVALIDA", "Solo se puede valorar una solicitud finalizada.");
+        }
+        int filas = solicitudes.cambiarEstado(s.getId(), EstadoSolicitud.FINALIZADA, EstadoSolicitud.VALORADA, null,
+            null, null, clock.instant());
+        if (filas == 0) {
+            throw new ConflictoException("TRANSICION_INVALIDA", "La solicitud cambió mientras tanto. Recargala.");
+        }
     }
 
     /** Aviso a la otra parte: quién actuó, qué hizo, y motivo o precio si hay. */
-    private void avisarCambio(Solicitud s, EstadoSolicitud destino, Rol actor) {
+    private void avisarCambio(Solicitud s, AccionSobreSolicitud accion, EstadoSolicitud destino, Rol actor) {
         boolean actuoElCliente = actor == Rol.CLIENTE;
         Cuenta quien = actuoElCliente ? s.getCliente() : s.getPrestador();
         Cuenta destinatario = actuoElCliente ? s.getPrestador() : s.getCliente();
@@ -198,17 +233,19 @@ public class ServicioDeSolicitudes {
             case ACEPTADA -> { tipo = TipoDeAviso.SOLICITUD_ACEPTADA; titulo = "Aceptaron tu solicitud"; verbo = "aceptó"; }
             case RECHAZADA -> { tipo = TipoDeAviso.SOLICITUD_RECHAZADA; titulo = "Rechazaron tu solicitud"; verbo = "rechazó"; }
             case EN_CURSO -> { tipo = TipoDeAviso.SOLICITUD_EN_CURSO; titulo = "Empezó el trabajo"; verbo = "inició"; }
-            case FINALIZADA -> { tipo = TipoDeAviso.SOLICITUD_FINALIZADA; titulo = "Terminó el trabajo"; verbo = "finalizó"; }
+            case FINALIZADA -> { tipo = TipoDeAviso.SOLICITUD_FINALIZADA; titulo = "Terminó el trabajo"; verbo = actuoElCliente ? "dio por realizada" : "finalizó"; }
             case CANCELADA -> { tipo = TipoDeAviso.SOLICITUD_CANCELADA; titulo = "Cancelaron la solicitud"; verbo = "canceló"; }
             default -> throw new IllegalStateException("Sin aviso para " + destino);
         }
-        StringBuilder cuerpo = new StringBuilder(quien.getNombreApellido()).append(' ').append(verbo)
-            .append(" la solicitud");
+        boolean ausente = accion == AccionSobreSolicitud.NO_SE_PRESENTO;
+        StringBuilder cuerpo = new StringBuilder(quien.getNombreApellido()).append(' ')
+            .append(ausente ? "indicó que no te presentaste a" : verbo).append(" la solicitud");
         if (s.getFechaDeseada() != null) {
             cuerpo.append(" del ").append(s.getFechaDeseada().format(DIA_MES_ANIO));
         }
         cuerpo.append('.');
-        if (s.getMotivo() != null && (destino == EstadoSolicitud.RECHAZADA || destino == EstadoSolicitud.CANCELADA)) {
+        if (!ausente && s.getMotivo() != null
+                && (destino == EstadoSolicitud.RECHAZADA || destino == EstadoSolicitud.CANCELADA)) {
             cuerpo.append(" Motivo: ").append(s.getMotivo());
         }
         if (destino == EstadoSolicitud.ACEPTADA && s.getPrecioAcordado() != null) {

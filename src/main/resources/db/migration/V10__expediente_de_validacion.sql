@@ -1,4 +1,4 @@
--- V8__expediente_de_validacion.sql · Porción 5, D01: declaración jurada de antecedentes y lo que falta en
+-- V10__expediente_de_validacion.sql · Porción 5, D01: declaración jurada de antecedentes y lo que falta en
 -- documentos_validacion para servir los archivos (mime y tamaño).
 ALTER TABLE prestadores ADD COLUMN declaracion_jurada_en TIMESTAMPTZ;
 ALTER TABLE documentos_validacion ADD COLUMN mime VARCHAR(30) NOT NULL;

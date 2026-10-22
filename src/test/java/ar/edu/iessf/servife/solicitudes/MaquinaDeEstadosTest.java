@@ -5,8 +5,10 @@ import static ar.edu.iessf.servife.common.seguridad.Rol.GESTOR;
 import static ar.edu.iessf.servife.common.seguridad.Rol.PRESTADOR;
 import static ar.edu.iessf.servife.solicitudes.domain.AccionSobreSolicitud.ACEPTAR;
 import static ar.edu.iessf.servife.solicitudes.domain.AccionSobreSolicitud.CANCELAR;
+import static ar.edu.iessf.servife.solicitudes.domain.AccionSobreSolicitud.CONFIRMAR_REALIZADO;
 import static ar.edu.iessf.servife.solicitudes.domain.AccionSobreSolicitud.FINALIZAR;
 import static ar.edu.iessf.servife.solicitudes.domain.AccionSobreSolicitud.INICIAR;
+import static ar.edu.iessf.servife.solicitudes.domain.AccionSobreSolicitud.NO_SE_PRESENTO;
 import static ar.edu.iessf.servife.solicitudes.domain.AccionSobreSolicitud.RECHAZAR;
 import static ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud.ACEPTADA;
 import static ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud.CANCELADA;
@@ -46,7 +48,10 @@ class MaquinaDeEstadosTest {
         new Object[] {CANCELAR, ACEPTADA, CLIENTE, CANCELADA},
         new Object[] {CANCELAR, ACEPTADA, PRESTADOR, CANCELADA},
         new Object[] {INICIAR, ACEPTADA, PRESTADOR, EN_CURSO},
-        new Object[] {FINALIZAR, EN_CURSO, PRESTADOR, FINALIZADA});
+        new Object[] {FINALIZAR, EN_CURSO, PRESTADOR, FINALIZADA},
+        new Object[] {CONFIRMAR_REALIZADO, ACEPTADA, CLIENTE, FINALIZADA},
+        new Object[] {CONFIRMAR_REALIZADO, EN_CURSO, CLIENTE, FINALIZADA},
+        new Object[] {NO_SE_PRESENTO, ACEPTADA, CLIENTE, CANCELADA});
 
     static Stream<Arguments> transicionesValidas() {
         return VALIDAS.stream().map(v -> Arguments.of(v));
@@ -112,6 +117,29 @@ class MaquinaDeEstadosTest {
     }
 
     @Test
+    void soloIniciarConfirmarYNoSePresentoDependenDeLaFecha() {
+        assertThat(Stream.of(AccionSobreSolicitud.values()).filter(AccionSobreSolicitud::requiereLlegarLaFecha))
+            .containsExactlyInAnyOrder(INICIAR, CONFIRMAR_REALIZADO, NO_SE_PRESENTO);
+    }
+
+    @Test
+    void elPrestadorNoPuedeMarcarAusenciaNiConfirmarRealizada() {
+        assertThatThrownBy(() -> MaquinaDeEstados.destino(ACEPTADA, NO_SE_PRESENTO, PRESTADOR))
+            .isInstanceOf(ActorNoPermitidoException.class);
+        assertThatThrownBy(() -> MaquinaDeEstados.destino(EN_CURSO, CONFIRMAR_REALIZADO, PRESTADOR))
+            .isInstanceOf(ActorNoPermitidoException.class);
+    }
+
+    @Test
+    void noSePresentoNoSeAplicaDesdeEnCursoNiDesdeFinalizada() {
+        assertThatThrownBy(() -> MaquinaDeEstados.destino(EN_CURSO, NO_SE_PRESENTO, CLIENTE))
+            .isInstanceOf(TransicionInvalidaException.class)
+            .hasMessage("No se puede marcar como ausente al prestador de una solicitud en curso.");
+        assertThatThrownBy(() -> MaquinaDeEstados.destino(FINALIZADA, NO_SE_PRESENTO, CLIENTE))
+            .isInstanceOf(TransicionInvalidaException.class);
+    }
+
+    @Test
     void valoradaNoAdmiteNingunaAccion() {
         for (AccionSobreSolicitud accion : AccionSobreSolicitud.values()) {
             assertThatThrownBy(() -> MaquinaDeEstados.destino(VALORADA, accion, CLIENTE))
@@ -124,10 +152,10 @@ class MaquinaDeEstadosTest {
             Arguments.of(PENDIENTE, CLIENTE, List.of(CANCELAR)),
             Arguments.of(PENDIENTE, PRESTADOR, List.of(ACEPTAR, RECHAZAR)),
             Arguments.of(PENDIENTE, GESTOR, List.of()),
-            Arguments.of(ACEPTADA, CLIENTE, List.of(CANCELAR)),
+            Arguments.of(ACEPTADA, CLIENTE, List.of(CANCELAR, CONFIRMAR_REALIZADO, NO_SE_PRESENTO)),
             Arguments.of(ACEPTADA, PRESTADOR, List.of(INICIAR, CANCELAR)),
             Arguments.of(ACEPTADA, GESTOR, List.of()),
-            Arguments.of(EN_CURSO, CLIENTE, List.of()),
+            Arguments.of(EN_CURSO, CLIENTE, List.of(CONFIRMAR_REALIZADO)),
             Arguments.of(EN_CURSO, PRESTADOR, List.of(FINALIZAR)),
             Arguments.of(RECHAZADA, PRESTADOR, List.of()),
             Arguments.of(CANCELADA, CLIENTE, List.of()),

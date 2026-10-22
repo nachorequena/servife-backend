@@ -1,27 +1,34 @@
 package ar.edu.iessf.servife.gestion.controller;
 
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import ar.edu.iessf.servife.common.error.NoImplementadoException;
+import ar.edu.iessf.servife.common.paginacion.Pagina;
+import ar.edu.iessf.servife.gestion.dto.ConversacionResponse;
+import ar.edu.iessf.servife.gestion.service.ServicioDeChats;
 
 /**
- * Módulo E — Mensajería y avisos (porción 4: Pedro Soria).
- * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * Cada método es un stub que responde 501 hasta que se implemente: definí los DTOs en dto/,
- * la lógica en service/ y reemplazá el throw.
+ * Módulo E — Mensajería y avisos (porción 4: Pedro Soria). Bandeja Mensajes (D04), según
+ * servife-ia/.ai/05-api-contract.md.
  */
 @RestController
 @RequestMapping("/conversaciones")
 public class ConversacionController {
 
-    /** E12 · GET /conversaciones · D04 · Bandeja Mensajes: consultas previas y chats de solicitudes. Solo lectura, no inicia conversaciones. */
+    private final ServicioDeChats chats;
+
+    public ConversacionController(ServicioDeChats chats) {
+        this.chats = chats;
+    }
+
+    /** E12 · GET /conversaciones · D04 · Los chats de las solicitudes del usuario, con el último mensaje y los no leídos. Solo lectura, no inicia conversaciones. */
     @PreAuthorize("hasAnyRole('CLIENTE', 'PRESTADOR')")
     @GetMapping
-    public ResponseEntity<Void> listar() {
-        throw new NoImplementadoException("E12");
+    public Pagina<ConversacionResponse> listar(@RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        return chats.conversaciones(page, size);
     }
 }

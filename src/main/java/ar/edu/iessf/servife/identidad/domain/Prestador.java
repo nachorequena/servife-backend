@@ -23,7 +23,7 @@ import jakarta.persistence.Table;
 /**
  * Cuenta de prestador (tabla prestadores): columnas de identidad y de perfil de servicio
  * (zona, lat, lng, radio_km, descripcion; valoracion_promedio es solo lectura) y la auditoría de la
- * validación (V7: quién la resolvió, cuándo y con qué motivo; postulado_en es desde cuándo espera).
+ * validación (V9: quién la resolvió, cuándo y con qué motivo; postulado_en es desde cuándo espera).
  * UPDATE dinámico: solo escribe las columnas modificadas, así guardar el perfil (B7) no pisa
  * una decisión concurrente del gestor sobre estado_validacion (E6).
  */
@@ -96,7 +96,7 @@ public class Prestador extends EntidadBase implements Cuenta {
     @Column(name = "motivo_validacion")
     private String motivoValidacion;
 
-    /** Cuándo aceptó la declaración jurada de antecedentes (D01, V8); se tilda al cargar documentos (E7). */
+    /** Cuándo aceptó la declaración jurada de antecedentes (D01, V10); se tilda al cargar documentos (E7). */
     @Column(name = "declaracion_jurada_en")
     private Instant declaracionJuradaEn;
 

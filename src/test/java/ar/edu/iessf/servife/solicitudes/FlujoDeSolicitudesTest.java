@@ -49,8 +49,8 @@ import ar.edu.iessf.servife.identidad.repository.GestorRepository;
 
 /**
  * Flujo completo de solicitudes por HTTP contra PostgreSQL real, con tokens de A2 (cadena de seguridad
- * real): prestador aprobado por el gestor, búsqueda, imagen, solicitud, aceptación, inicio, fin y
- * una segunda solicitud cancelada por el cliente.
+ * real): prestador aprobado por el gestor, búsqueda, imagen, solicitud con su chat, aceptación, inicio, fin
+ * (que cierra el chat) y una segunda solicitud cancelada por el cliente.
  */
 @SpringBootTest(properties = "servife.jwt.secreto=secreto-de-prueba-de-al-menos-32-caracteres")
 @AutoConfigureMockMvc
@@ -205,6 +205,16 @@ class FlujoDeSolicitudesTest {
         String uuidSolicitud = creada.get("uuid").asText();
         assertThat(creada.get("estado").asText()).isEqualTo("PENDIENTE");
 
+        // C1 crea el chat (D33): el cliente escribe y el prestador lo lee desde C3
+        String uuidChat = creada.get("uuidChat").asText();
+        assertThat(llamar(get(API + "/solicitudes/" + uuidSolicitud), tokenPrestador, 200, null)
+            .get("uuidChat").asText()).isEqualTo(uuidChat);
+        llamar(post(API + "/chats/" + uuidChat + "/mensajes"), tokenCliente, 201, Map.of("texto", "¿Viene a la tarde?"));
+        JsonNode chatDelPrestador = llamar(get(API + "/chats/" + uuidChat + "/mensajes"), tokenPrestador, 200, null);
+        assertThat(chatDelPrestador.get("mensajes").get(0).get("texto").asText()).isEqualTo("¿Viene a la tarde?");
+        assertThat(chatDelPrestador.get("mensajes").get(0).get("propio").asBoolean()).isFalse();
+        assertThat(chatDelPrestador.get("contraparte").get("nombreApellido").asText()).isEqualTo("Ana Cliente");
+
         // El prestador ve el aviso, la solicitud en C2 y puede leer la imagen
         assertThat(tiposDeAvisos(tokenPrestador)).containsExactlyInAnyOrder("PERFIL_APROBADO", "SOLICITUD_NUEVA");
         JsonNode listaPrestador = llamar(get(API + "/solicitudes"), tokenPrestador, 200, null).get("contenido");
@@ -232,6 +242,14 @@ class FlujoDeSolicitudesTest {
             .get("estado").asText()).isEqualTo("FINALIZADA");
         assertThat(tiposDeAvisos(tokenClienteHoy)).containsExactlyInAnyOrder(
             "SOLICITUD_ACEPTADA", "SOLICITUD_EN_CURSO", "SOLICITUD_FINALIZADA");
+
+        // Finalizada: el chat queda de solo lectura
+        JsonNode cerrado = llamar(post(API + "/chats/" + uuidChat + "/mensajes"), tokenClienteHoy, 409,
+            Map.of("texto", "Gracias"));
+        assertThat(cerrado.get("codigo").asText()).isEqualTo("CHAT_CERRADO");
+        JsonNode chatFinal = llamar(get(API + "/chats/" + uuidChat + "/mensajes"), tokenClienteHoy, 200, null);
+        assertThat(chatFinal.get("sePuedeEscribir").asBoolean()).isFalse();
+        assertThat(chatFinal.get("mensajes")).hasSize(1);
 
         // B6: un servicio realizado
         JsonNode ficha = llamar(get(API + "/prestadores/" + uuidPrestador), tokenClienteHoy, 200, null);
