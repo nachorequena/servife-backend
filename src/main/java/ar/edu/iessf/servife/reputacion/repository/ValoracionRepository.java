@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -32,4 +33,15 @@ public interface ValoracionRepository extends JpaRepository<Valoracion, Long> {
     @Query("select v.solicitud.id as idSolicitud, v.puntaje as puntaje from Valoracion v "
         + "where v.solicitud.id in :ids and v.eliminadoEn is null")
     List<PuntajeDeSolicitud> puntajesDe(@Param("ids") Collection<Long> idsDeSolicitudes);
+
+    /**
+     * D1: recalcula prestadores.valoracion_promedio (DECIMAL(2,1)) con las valoraciones vigentes del
+     * prestador. La columna es de solo lectura en la entidad Prestador, por eso va por SQL.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE prestadores SET valoracion_promedio = (SELECT ROUND(AVG(v.puntaje), 1) "
+        + "FROM valoraciones v JOIN solicitudes_servicio s ON s.id_solicitud = v.id_solicitud "
+        + "WHERE s.id_prestador = :idPrestador AND v.eliminado_en IS NULL) WHERE id_prestador = :idPrestador",
+        nativeQuery = true)
+    void recalcularPromedio(@Param("idPrestador") Long idPrestador);
 }
