@@ -191,6 +191,74 @@ class ServicioDeSesionTest {
         assertThat(sesion.iniciar(new LoginRequest("gaby@mail.com", CLAVE)).rol()).isEqualTo(Rol.GESTOR);
     }
 
+    // ─── Cliente y prestador con el mismo email (D43) ──────────────────────
+
+    private Prestador guardarAnaPrestadora(String clave) {
+        TipoServicio tipo = tiposServicio.findByEliminadoEnIsNullOrderByNombre().get(0);
+        return prestadores.saveAndFlush(new Prestador("Ana Pérez", "ana@mail.com", passwordEncoder.encode(clave), tipo));
+    }
+
+    @Test
+    void conDosCuentasYSinRolPideElegirSinEmitirTokens() {
+        guardarAna();
+        guardarAnaPrestadora(CLAVE);
+        long refreshAntes = refreshTokens.count();
+
+        assertThatThrownBy(() -> sesion.iniciar(new LoginRequest("ana@mail.com", CLAVE)))
+            .isInstanceOfSatisfying(NegocioException.class, e -> {
+                assertThat(e.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                assertThat(e.getCodigo()).isEqualTo("ELEGIR_ROL");
+            });
+        assertThat(refreshTokens.count()).isEqualTo(refreshAntes);
+    }
+
+    @Test
+    void conDosCuentasYRolEntraConLaElegida() {
+        Cliente comoCliente = guardarAna();
+        Prestador comoPrestadora = guardarAnaPrestadora(CLAVE);
+
+        TokensResponse cliente = sesion.iniciar(new LoginRequest("ana@mail.com", CLAVE, Rol.CLIENTE));
+        TokensResponse prestadora = sesion.iniciar(new LoginRequest("ana@mail.com", CLAVE, Rol.PRESTADOR));
+
+        assertThat(cliente.rol()).isEqualTo(Rol.CLIENTE);
+        assertThat(jwtDecoder.decode(cliente.accessToken()).getSubject()).isEqualTo(comoCliente.getUuid().toString());
+        assertThat(prestadora.rol()).isEqualTo(Rol.PRESTADOR);
+        assertThat(jwtDecoder.decode(prestadora.accessToken()).getSubject())
+            .isEqualTo(comoPrestadora.getUuid().toString());
+    }
+
+    @Test
+    void siSoloUnaDeLasDosCoincideEntraDirectoConEsa() {
+        guardarAna();
+        guardarAnaPrestadora("otra-clave1");
+
+        assertThat(sesion.iniciar(new LoginRequest("ana@mail.com", CLAVE)).rol()).isEqualTo(Rol.CLIENTE);
+    }
+
+    @Test
+    void unRolQueElEmailNoTieneDa401() {
+        guardarAna();
+
+        assertThatThrownBy(() -> sesion.iniciar(new LoginRequest("ana@mail.com", CLAVE, Rol.PRESTADOR)))
+            .isInstanceOfSatisfying(NegocioException.class,
+                e -> assertThat(e.getCodigo()).isEqualTo("CREDENCIALES_INVALIDAS"));
+    }
+
+    @Test
+    void laSuspensionSeMiraEnLaCuentaElegida() {
+        guardarAna();
+        Prestador prestadora = guardarAnaPrestadora(CLAVE);
+        prestadora.setEstadoCuenta(EstadoCuenta.SUSPENDIDA);
+        prestadores.saveAndFlush(prestadora);
+
+        assertThatThrownBy(() -> sesion.iniciar(new LoginRequest("ana@mail.com", CLAVE)))
+            .isInstanceOfSatisfying(NegocioException.class, e -> assertThat(e.getCodigo()).isEqualTo("ELEGIR_ROL"));
+        assertThatThrownBy(() -> sesion.iniciar(new LoginRequest("ana@mail.com", CLAVE, Rol.PRESTADOR)))
+            .isInstanceOfSatisfying(NegocioException.class,
+                e -> assertThat(e.getCodigo()).isEqualTo("CUENTA_SUSPENDIDA"));
+        assertThat(sesion.iniciar(new LoginRequest("ana@mail.com", CLAVE, Rol.CLIENTE)).rol()).isEqualTo(Rol.CLIENTE);
+    }
+
     @Test
     void renovarRotaElRefreshYElViejoYaNoSirve() {
         guardarAna();

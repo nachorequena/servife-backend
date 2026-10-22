@@ -30,9 +30,9 @@ public class BusquedaDePrestadoresRepository {
         this.jdbc = jdbc;
     }
 
-    /** Criterios ya validados y normalizados. */
+    /** Criterios ya validados y normalizados. {@code emailExcluido}: el del cliente que busca (null si no hay). */
     public record Criterios(String q, UUID tipoServicioId, Double lat, Double lng, Integer puntajeMin,
-            List<Integer> dias, boolean ordenarPorCercania, int page, int size) {
+            List<Integer> dias, boolean ordenarPorCercania, String emailExcluido, int page, int size) {
 
         boolean conUbicacion() {
             return lat != null && lng != null;
@@ -83,6 +83,10 @@ public class BusquedaDePrestadoresRepository {
         if (c.q() != null) {
             condiciones.add("(p.nombre_apellido ILIKE :q OR t.nombre ILIKE :q)");
             params.addValue("q", "%" + c.q().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%");
+        }
+        if (c.emailExcluido() != null) {
+            condiciones.add("p.email <> :emailExcluido");
+            params.addValue("emailExcluido", c.emailExcluido());
         }
         if (c.tipoServicioId() != null) {
             condiciones.add("t.uuid = :tipoServicioId");

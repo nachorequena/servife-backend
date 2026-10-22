@@ -204,6 +204,21 @@ class ServicioDeCuentaTest {
     }
 
     @Test
+    void cambiarContraseniaTambienCambiaLaDeLaCuentaDelOtroRolDelMismoEmail() {
+        Cliente ana = guardarAna();
+        TipoServicio tipo = tiposServicio.findAll().get(0);
+        Prestador anaPrestadora = prestadores.saveAndFlush(
+            new Prestador("Ana Pérez", "ana@mail.com", passwordEncoder.encode(CLAVE), tipo));
+
+        servicio.cambiarContrasenia(ana.getUuid(), Rol.CLIENTE, new CambiarContraseniaRequest(CLAVE, "nueva-clave9"));
+
+        Prestador guardada = prestadores.findByUuidAndEliminadoEnIsNull(anaPrestadora.getUuid()).orElseThrow();
+        assertThat(passwordEncoder.matches("nueva-clave9", guardada.getContrasenia())).isTrue();
+        verify(tokens).revocarTodos(ana.getUuid());
+        verify(tokens).revocarTodos(anaPrestadora.getUuid());
+    }
+
+    @Test
     void cambiarContraseniaConActualIncorrectaNoCambiaNadaNiRevoca() {
         Cliente ana = guardarAna();
         UUID uuid = ana.getUuid();

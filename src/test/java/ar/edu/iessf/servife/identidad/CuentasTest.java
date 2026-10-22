@@ -58,7 +58,7 @@ class CuentasTest {
     void buscaPorEmailNormalizandoMayusculasYEspacios() {
         Cliente ana = guardarAna();
 
-        Cuenta encontrada = cuentas.buscarPorEmail(" Ana@Mail.com ").orElseThrow();
+        Cuenta encontrada = cuentas.buscarTodasPorEmail(" Ana@Mail.com ").get(0);
 
         assertThat(encontrada.getRol()).isEqualTo(Rol.CLIENTE);
         assertThat(encontrada.getUuid()).isEqualTo(ana.getUuid());
@@ -88,9 +88,30 @@ class CuentasTest {
         ana.darDeBaja();
         clientes.saveAndFlush(ana);
 
-        assertThat(cuentas.buscarPorEmail("ana@mail.com")).isEmpty();
+        assertThat(cuentas.buscarTodasPorEmail("ana@mail.com")).isEmpty();
         assertThat(cuentas.buscarPorUuid(ana.getUuid(), Rol.CLIENTE)).isEmpty();
         assertThat(cuentas.emailRegistrado("ANA@mail.com")).isTrue();
+    }
+
+    @Test
+    void elMismoEmailComoClienteYPrestadorDevuelveLasDosEnOrden() {
+        TipoServicio tipo = tiposServicio.findByEliminadoEnIsNullOrderByNombre().get(0);
+        Prestador comoPrestadora = prestadores.saveAndFlush(new Prestador("Ana Pérez", "ana@mail.com", "hash", tipo));
+        Cliente comoCliente = guardarAna();
+
+        assertThat(cuentas.buscarTodasPorEmail(" ANA@mail.com ")).extracting(Cuenta::getUuid)
+            .containsExactly(comoCliente.getUuid(), comoPrestadora.getUuid());
+    }
+
+    @Test
+    void buscarConBajasEncuentraLaDadaDeBajaSoloEnSuRol() {
+        Cliente ana = guardarAna();
+        ana.darDeBaja();
+        clientes.saveAndFlush(ana);
+
+        assertThat(cuentas.buscarPorEmailConBajas("ANA@mail.com", Rol.CLIENTE)).get()
+            .extracting(Cuenta::estaEliminado).isEqualTo(true);
+        assertThat(cuentas.buscarPorEmailConBajas("ana@mail.com", Rol.PRESTADOR)).isEmpty();
     }
 
     @Test
@@ -115,7 +136,7 @@ class CuentasTest {
         assertThat(estado).isEqualTo("PENDIENTE");
         assertThat(pedro.getEstadoValidacion()).isEqualTo(EstadoValidacion.PENDIENTE);
 
-        Cuenta encontrada = cuentas.buscarPorEmail("PEDRO@mail.com").orElseThrow();
+        Cuenta encontrada = cuentas.buscarTodasPorEmail("PEDRO@mail.com").get(0);
         assertThat(encontrada.getRol()).isEqualTo(Rol.PRESTADOR);
         assertThat(cuentas.buscarPorUuid(pedro.getUuid(), Rol.PRESTADOR)).isPresent();
     }
@@ -124,7 +145,7 @@ class CuentasTest {
     void elGestorTieneRolGestorYCambiaContrasenia() {
         gestores.saveAndFlush(new Gestor("Gaby", "gaby@mail.com", "hash"));
 
-        Cuenta gestor = cuentas.buscarPorEmail("gaby@mail.com").orElseThrow();
+        Cuenta gestor = cuentas.buscarTodasPorEmail("gaby@mail.com").get(0);
         gestor.cambiarContrasenia("otro-hash");
 
         assertThat(gestor.getRol()).isEqualTo(Rol.GESTOR);

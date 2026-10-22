@@ -61,7 +61,7 @@ public class GestorInicial implements ApplicationRunner {
         }
         if (cuentas.emailRegistrado(email)) {
             throw new IllegalStateException("GESTOR_INICIAL_EMAIL (" + Cuentas.normalizar(email)
-                + ") ya está registrado como otra cuenta; el email es único entre clientes, prestadores y gestores");
+                + ") ya está registrado como otra cuenta; el email de un gestor no lo puede usar ninguna otra cuenta");
         }
 
         String nombre = propiedades.nombre() == null || propiedades.nombre().isBlank()

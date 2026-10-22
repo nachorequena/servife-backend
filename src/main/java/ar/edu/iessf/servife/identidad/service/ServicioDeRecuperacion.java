@@ -4,6 +4,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -56,7 +57,7 @@ public class ServicioDeRecuperacion {
     @Transactional
     public void solicitar(RecuperarRequest pedido) {
         String email = Cuentas.normalizar(pedido.email());
-        if (cuentas.buscarPorEmail(email).isEmpty()) {
+        if (cuentas.buscarTodasPorEmail(email).isEmpty()) {
             return;
         }
         Instant ahora = reloj.instant();
@@ -91,10 +92,16 @@ public class ServicioDeRecuperacion {
         if (codigos.usarSiVigente(guardado.getId(), ahora) == 0) {
             throw codigoInvalido();
         }
-        Cuenta cuenta = cuentas.buscarPorEmail(email).orElseThrow(ServicioDeRecuperacion::codigoInvalido);
-
-        cuenta.cambiarContrasenia(passwordEncoder.encode(pedido.contraseniaNueva()));
-        tokens.revocarTodos(cuenta.getUuid());
+        List<Cuenta> vinculadas = cuentas.buscarTodasPorEmail(email);
+        if (vinculadas.isEmpty()) {
+            throw codigoInvalido();
+        }
+        // Una persona, una contraseña: va a la cuenta de cliente y a la de prestador del email (D43).
+        String hash = passwordEncoder.encode(pedido.contraseniaNueva());
+        for (Cuenta cuenta : vinculadas) {
+            cuenta.cambiarContrasenia(hash);
+            tokens.revocarTodos(cuenta.getUuid());
+        }
     }
 
     private static NegocioException codigoInvalido() {

@@ -1,13 +1,15 @@
 package ar.edu.iessf.servife.identidad.service;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ar.edu.iessf.servife.common.error.ConflictoException;
 import ar.edu.iessf.servife.common.error.NegocioException;
 import ar.edu.iessf.servife.identidad.domain.Cuenta;
 import ar.edu.iessf.servife.identidad.domain.EstadoCuenta;
@@ -37,20 +39,38 @@ public class ServicioDeSesion {
     /**
      * Mismo 401 si el email no existe (o está dado de baja) o la contraseña no coincide. La suspensión
      * solo se revela con la contraseña correcta. El prestador PENDIENTE o RECHAZADO sí entra.
+     * Si el email tiene cuenta de cliente y de prestador (D43) y las dos coinciden, sin rol responde
+     * 409 ELEGIR_ROL; con rol entra con esa. La suspensión se mira en la cuenta elegida.
      */
     public TokensResponse iniciar(LoginRequest pedido) {
         // BCrypt solo mira 72 bytes y puede fallar con más: ninguna contraseña válida los pasa.
         if (pedido.contrasenia().getBytes(StandardCharsets.UTF_8).length > MAX_BYTES_CONTRASENIA) {
             throw credencialesInvalidas();
         }
-        Optional<Cuenta> cuenta = cuentas.buscarPorEmail(pedido.email());
-        String hash = cuenta.map(Cuenta::getContrasenia).orElse(HASH_FICTICIO);
-        boolean coincide = passwordEncoder.matches(pedido.contrasenia(), hash);
-        if (cuenta.isEmpty() || !coincide) {
+        List<Cuenta> candidatas = cuentas.buscarTodasPorEmail(pedido.email()).stream()
+            .filter(c -> pedido.rol() == null || c.getRol() == pedido.rol())
+            .toList();
+        if (candidatas.isEmpty()) {
+            passwordEncoder.matches(pedido.contrasenia(), HASH_FICTICIO);
             throw credencialesInvalidas();
         }
-        verificarActiva(cuenta.get());
-        return tokens.emitir(cuenta.get().getUuid(), cuenta.get().getRol());
+        // Se prueban todas, sin cortar en la primera: el tiempo no depende de cuál coincide.
+        List<Cuenta> coinciden = new ArrayList<>();
+        for (Cuenta candidata : candidatas) {
+            if (passwordEncoder.matches(pedido.contrasenia(), candidata.getContrasenia())) {
+                coinciden.add(candidata);
+            }
+        }
+        if (coinciden.isEmpty()) {
+            throw credencialesInvalidas();
+        }
+        if (coinciden.size() > 1) {
+            throw new ConflictoException("ELEGIR_ROL",
+                "Tenés una cuenta de cliente y una de prestador. Elegí con cuál ingresar.");
+        }
+        Cuenta cuenta = coinciden.get(0);
+        verificarActiva(cuenta);
+        return tokens.emitir(cuenta.getUuid(), cuenta.getRol());
     }
 
     /** Rota el refresh: consume el viejo y emite un par nuevo. Cuenta inexistente o dada de baja: 401; suspendida: 403. */

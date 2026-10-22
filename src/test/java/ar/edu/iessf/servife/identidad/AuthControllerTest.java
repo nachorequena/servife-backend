@@ -211,6 +211,42 @@ class AuthControllerTest {
     }
 
     @Test
+    void loginConRolLoPasaAlServicio() throws Exception {
+        when(sesion.iniciar(any(LoginRequest.class))).thenReturn(new TokensResponse("a", "r", Rol.PRESTADOR));
+
+        enviar("/auth/login", """
+            {"email":"ana@mail.com","contrasenia":"clave1234","rol":"PRESTADOR"}
+            """)
+            .andExpect(status().isOk());
+
+        ArgumentCaptor<LoginRequest> recibido = ArgumentCaptor.forClass(LoginRequest.class);
+        verify(sesion).iniciar(recibido.capture());
+        assertThat(recibido.getValue().rol()).isEqualTo(Rol.PRESTADOR);
+    }
+
+    @Test
+    void loginConRolInexistenteDa400() throws Exception {
+        enviar("/auth/login", """
+            {"email":"ana@mail.com","contrasenia":"clave1234","rol":"ADMIN"}
+            """)
+            .andExpect(status().isBadRequest());
+        verify(sesion, never()).iniciar(any());
+    }
+
+    @Test
+    void conDosCuentasDa409ElegirRolConElFormatoDeError() throws Exception {
+        when(sesion.iniciar(any(LoginRequest.class))).thenThrow(new ConflictoException("ELEGIR_ROL",
+            "Tenés una cuenta de cliente y una de prestador. Elegí con cuál ingresar."));
+
+        enviar("/auth/login", """
+            {"email":"ana@mail.com","contrasenia":"clave1234"}
+            """)
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.codigo").value("ELEGIR_ROL"))
+            .andExpect(jsonPath("$.mensaje").value("Tenés una cuenta de cliente y una de prestador. Elegí con cuál ingresar."));
+    }
+
+    @Test
     void loginSinCuerpoDa400PorqueEsPublicoYNoPorFaltaDeToken() throws Exception {
         mvc.perform(post(CONTEXTO + "/auth/login").contextPath(CONTEXTO))
             .andExpect(status().isBadRequest());

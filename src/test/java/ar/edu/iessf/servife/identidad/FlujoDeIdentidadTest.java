@@ -144,11 +144,53 @@ class FlujoDeIdentidadTest {
         login(email, CONTRASENIA_A7, 401);
         login(email, CONTRASENIA_A9, 200);
 
-        // Mismo email como cliente: 409
+        // Mismo email como cliente con otra contraseña: 409 (con la misma sería la cuenta vinculada, D43)
         var conflicto = enviar("/auth/registro", 409, Map.of("rol", "CLIENTE", "nombreApellido", "Otra Persona",
             "email", email, "contrasenia", CONTRASENIA));
         assertThat(conflicto.get("codigo").asText()).isEqualTo("EMAIL_YA_REGISTRADO");
         assertThat(conflicto.get("errores").get(0).get("campo").asText()).isEqualTo("email");
         assertThat(conflicto.get("errores").get(0).get("detalle").asText()).isEqualTo("ya existe");
+    }
+
+    /** D43: una persona con cuenta de cliente y de prestador en el mismo email, con una sola contraseña. */
+    @Test
+    void clienteYPrestadorConElMismoEmail() throws Exception {
+        String email = "doble-" + UUID.randomUUID().toString().substring(0, 8) + "@mail.com";
+        String idTipo = json.readTree(mvc.perform(get(API + "/tipos-servicio").contextPath(API))
+            .andReturn().getResponse().getContentAsString()).get(0).get("uuid").asText();
+
+        // A1: cliente, y después prestador con la misma contraseña
+        enviar("/auth/registro", 201, Map.of("rol", "CLIENTE", "nombreApellido", "Ana Doble", "email", email,
+            "contrasenia", CONTRASENIA));
+        enviar("/auth/registro", 201, Map.of("rol", "PRESTADOR", "nombreApellido", "Ana Doble", "email", email,
+            "contrasenia", CONTRASENIA, "idTipoServicio", idTipo));
+
+        // A2 sin rol: pide elegir; con rol entra con esa cuenta (A4 lo confirma)
+        assertThat(login(email, CONTRASENIA, 409).get("codigo").asText()).isEqualTo("ELEGIR_ROL");
+        for (String rol : new String[] {"CLIENTE", "PRESTADOR"}) {
+            JsonNode sesion = enviar("/auth/login", 200, Map.of("email", email, "contrasenia", CONTRASENIA, "rol", rol));
+            mvc.perform(get(API + "/auth/me").contextPath(API)
+                    .header("Authorization", "Bearer " + sesion.get("accessToken").asText()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rol").value(rol));
+        }
+
+        // A7 desde el cliente: la contraseña nueva vale para las dos cuentas
+        String access = enviar("/auth/login", 200, Map.of("email", email, "contrasenia", CONTRASENIA, "rol", "CLIENTE"))
+            .get("accessToken").asText();
+        llamar(patch(API + "/usuarios/me/password").header("Authorization", "Bearer " + access), 204,
+            Map.of("contraseniaActual", CONTRASENIA, "contraseniaNueva", CONTRASENIA_A7));
+        login(email, CONTRASENIA, 401);
+        assertThat(login(email, CONTRASENIA_A7, 409).get("codigo").asText()).isEqualTo("ELEGIR_ROL");
+        enviar("/auth/login", 200, Map.of("email", email, "contrasenia", CONTRASENIA_A7, "rol", "PRESTADOR"));
+
+        // A8 + A9: un código por email y la contraseña nueva va a las dos
+        enviar("/auth/recuperar", 204, Map.of("email", email));
+        enviar("/auth/recuperar/confirmar", 204,
+            Map.of("email", email, "codigo", capturarCodigo(email), "contraseniaNueva", CONTRASENIA_A9));
+        login(email, CONTRASENIA_A7, 401);
+        for (String rol : new String[] {"CLIENTE", "PRESTADOR"}) {
+            enviar("/auth/login", 200, Map.of("email", email, "contrasenia", CONTRASENIA_A9, "rol", rol));
+        }
     }
 }

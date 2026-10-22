@@ -90,9 +90,11 @@ public class ServicioDeSolicitudes {
         Cliente cliente = clientes.findByUuidAndEliminadoEnIsNull(usuarioActual.uuid())
             .orElseThrow(() -> new RecursoNoEncontradoException("No existe."));
 
+        // Nadie se pide un servicio a sí mismo: la cuenta de prestador de su mismo email no cuenta (D43).
         Prestador prestador = prestadores.findByUuidAndEliminadoEnIsNull(pedido.uuidPrestador())
             .filter(p -> p.getEstadoValidacion() == EstadoValidacion.APROBADO
-                && p.getEstadoCuenta() == EstadoCuenta.ACTIVA)
+                && p.getEstadoCuenta() == EstadoCuenta.ACTIVA
+                && !p.getEmail().equals(cliente.getEmail()))
             .orElseThrow(() -> new ValidacionException("uuidPrestador", "no está disponible"));
 
         LocalDate hoy = hoyEnArgentina();

@@ -1,6 +1,7 @@
 package ar.edu.iessf.servife.catalogo.service;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -14,6 +15,9 @@ import ar.edu.iessf.servife.catalogo.repository.BusquedaDePrestadoresRepository.
 import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.common.paginacion.Pagina;
 import ar.edu.iessf.servife.common.paginacion.Paginacion;
+import ar.edu.iessf.servife.common.seguridad.Rol;
+import ar.edu.iessf.servife.identidad.domain.Cuenta;
+import ar.edu.iessf.servife.identidad.service.Cuentas;
 
 /** B5 · CU04: valida y normaliza los filtros y delega la consulta. */
 @Service
@@ -22,13 +26,28 @@ public class BuscadorDePrestadores {
     private static final int LARGO_MINIMO_Q = 2;
 
     private final BusquedaDePrestadoresRepository repositorio;
+    private final Cuentas cuentas;
 
-    public BuscadorDePrestadores(BusquedaDePrestadoresRepository repositorio) {
+    public BuscadorDePrestadores(BusquedaDePrestadoresRepository repositorio, Cuentas cuentas) {
         this.repositorio = repositorio;
+        this.cuentas = cuentas;
+    }
+
+    /** Lo que ve un usuario: un cliente no se encuentra a sí mismo como prestador (mismo email, D43). */
+    @Transactional(readOnly = true)
+    public Pagina<PrestadorEnListaResponse> buscar(FiltrosDeBusqueda f, UUID uuidUsuario, Rol rol) {
+        String emailExcluido = rol == Rol.CLIENTE
+            ? cuentas.buscarPorUuid(uuidUsuario, rol).map(Cuenta::getEmail).orElse(null)
+            : null;
+        return buscar(f, emailExcluido);
     }
 
     @Transactional(readOnly = true)
     public Pagina<PrestadorEnListaResponse> buscar(FiltrosDeBusqueda f) {
+        return buscar(f, null);
+    }
+
+    private Pagina<PrestadorEnListaResponse> buscar(FiltrosDeBusqueda f, String emailExcluido) {
         String orden = f.orden() == null ? null : f.orden().trim().toLowerCase();
         if (orden != null && !orden.equals("cercania") && !orden.equals("valoracion")) {
             throw new ValidacionException("orden", "Elegí cercania o valoracion.");
@@ -58,6 +77,6 @@ public class BuscadorDePrestadores {
         boolean porCercania = f.lat() != null && !"valoracion".equals(orden);
 
         return repositorio.buscar(new Criterios(q, f.tipoServicioId(), f.lat(), f.lng(), f.puntajeMin(), dias,
-            porCercania, pagina.getPageNumber(), pagina.getPageSize()));
+            porCercania, emailExcluido, pagina.getPageNumber(), pagina.getPageSize()));
     }
 }
