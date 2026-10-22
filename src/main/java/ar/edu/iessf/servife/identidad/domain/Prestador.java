@@ -1,6 +1,7 @@
 package ar.edu.iessf.servife.identidad.domain;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 
 import ar.edu.iessf.servife.catalogo.domain.TipoServicio;
@@ -21,7 +22,8 @@ import jakarta.persistence.Table;
 
 /**
  * Cuenta de prestador (tabla prestadores): columnas de identidad y de perfil de servicio
- * (zona, lat, lng, radio_km, descripcion; valoracion_promedio es solo lectura).
+ * (zona, lat, lng, radio_km, descripcion; valoracion_promedio es solo lectura) y la auditoría de la
+ * validación (V9: quién la resolvió, cuándo y con qué motivo; postulado_en es desde cuándo espera).
  * UPDATE dinámico: solo escribe las columnas modificadas, así guardar el perfil (B7) no pisa
  * una decisión concurrente del gestor sobre estado_validacion (E6).
  */
@@ -80,6 +82,20 @@ public class Prestador extends EntidadBase implements Cuenta {
     @Column(name = "descripcion", columnDefinition = "TEXT")
     private String descripcion;
 
+    /** Desde cuándo espera revisión: el alta o el último cambio de rubro (E5 ordena por acá). */
+    @Column(name = "postulado_en", nullable = false)
+    private Instant postuladoEn;
+
+    /** id_gestor de quien resolvió la validación (E6); lo escribe PrestadorRepository.resolverSiPendiente. */
+    @Column(name = "validado_por")
+    private Long validadoPor;
+
+    @Column(name = "validado_en")
+    private Instant validadoEn;
+
+    @Column(name = "motivo_validacion")
+    private String motivoValidacion;
+
     /** Solo lectura: lo calcula el módulo de valoraciones. */
     @Column(name = "valoracion_promedio", precision = 2, scale = 1, insertable = false, updatable = false)
     private BigDecimal valoracionPromedio;
@@ -98,6 +114,12 @@ public class Prestador extends EntidadBase implements Cuenta {
         this.email = Cuentas.normalizar(email);
         this.contrasenia = contraseniaHash;
         this.tipoServicio = tipoServicio;
+    }
+
+    @Override
+    protected void alCrear() {
+        super.alCrear();
+        postuladoEn = getCreadoEn();
     }
 
     @Override
@@ -155,12 +177,17 @@ public class Prestador extends EntidadBase implements Cuenta {
 
     /**
      * Cambia el rubro. Si es distinto al actual, el prestador vuelve a PENDIENTE (sea cual sea su
-     * estado de validación): se revisa de nuevo con el rubro nuevo.
+     * estado de validación): se revisa de nuevo con el rubro nuevo, vuelve al final de la cola de E5
+     * y se borra la decisión anterior.
      */
     public void cambiarTipoServicio(TipoServicio nuevo) {
         if (!nuevo.getUuid().equals(tipoServicio.getUuid())) {
             this.tipoServicio = nuevo;
             this.estadoValidacion = EstadoValidacion.PENDIENTE;
+            this.postuladoEn = Instant.now();
+            this.validadoPor = null;
+            this.validadoEn = null;
+            this.motivoValidacion = null;
         }
     }
 
@@ -207,6 +234,22 @@ public class Prestador extends EntidadBase implements Cuenta {
 
     public void setEstadoValidacion(EstadoValidacion estadoValidacion) {
         this.estadoValidacion = estadoValidacion;
+    }
+
+    public Instant getPostuladoEn() {
+        return postuladoEn;
+    }
+
+    public Long getValidadoPor() {
+        return validadoPor;
+    }
+
+    public Instant getValidadoEn() {
+        return validadoEn;
+    }
+
+    public String getMotivoValidacion() {
+        return motivoValidacion;
     }
 
     @Override

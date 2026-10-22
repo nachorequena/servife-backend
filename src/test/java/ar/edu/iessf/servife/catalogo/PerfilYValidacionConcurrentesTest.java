@@ -46,6 +46,9 @@ class PerfilYValidacionConcurrentesTest {
             VALUES (?, 'Pedro Gas', 'concurrente@mail.com', 'hash', (SELECT id_tipo_servicio FROM tipos_servicio WHERE nombre = 'Gas'),
                 'PENDIENTE', 'ACTIVA')
             """, uuid);
+        UUID gestor = UUID.randomUUID();
+        jdbc.update("INSERT INTO gestores (uuid, nombre_apellido, email, contrasenia) VALUES (?, 'Gestor', 'gestor-concurrente@mail.com', 'hash')",
+            gestor);
         TransactionTemplate b7 = new TransactionTemplate(transacciones);
         TransactionTemplate e6 = new TransactionTemplate(transacciones);
         e6.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -54,7 +57,7 @@ class PerfilYValidacionConcurrentesTest {
             // B7 ya leyó al prestador como PENDIENTE...
             prestadores.findByUuidAndEliminadoEnIsNull(uuid).orElseThrow();
             // ...el gestor lo aprueba en otra transacción...
-            e6.executeWithoutResult(otro -> validacion.decidir(uuid, Decision.APROBAR, null));
+            e6.executeWithoutResult(otro -> validacion.decidir(uuid, Decision.APROBAR, null, gestor));
             // ...y B7 guarda con el mismo rubro.
             perfil.actualizarPerfil(uuid, new ActualizarPerfilDePrestadorRequest(tipo, "Centro", null, null, 10, "Gasista"));
         });
@@ -65,5 +68,6 @@ class PerfilYValidacionConcurrentesTest {
             .isEqualTo("Centro");
         jdbc.update("DELETE FROM notificaciones");
         jdbc.update("DELETE FROM prestadores WHERE uuid = ?", uuid);
+        jdbc.update("DELETE FROM gestores WHERE uuid = ?", gestor);
     }
 }

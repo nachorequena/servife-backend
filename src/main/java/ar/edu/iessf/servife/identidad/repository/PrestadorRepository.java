@@ -34,12 +34,15 @@ public interface PrestadorRepository extends JpaRepository<Prestador, Long> {
     Page<Prestador> findByEstadoValidacionAndEliminadoEnIsNull(EstadoValidacion estado, Pageable pagina);
 
     /**
-     * Cambia el estado de validación solo si el prestador sigue PENDIENTE y no está dado de baja. Una
-     * sola sentencia atómica: si dos gestores deciden a la vez, solo uno recibe 1.
+     * Cambia el estado de validación solo si el prestador sigue PENDIENTE y no está dado de baja, y
+     * deja la auditoría (gestor, fecha y motivo). Una sola sentencia atómica: si dos gestores deciden
+     * a la vez, solo uno recibe 1.
      */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("update Prestador p set p.estadoValidacion = :nuevo, p.actualizadoEn = :ahora "
+    @Query("update Prestador p set p.estadoValidacion = :nuevo, p.validadoPor = :gestor, p.validadoEn = :ahora, "
+        + "p.motivoValidacion = :motivo, p.actualizadoEn = :ahora "
         + "where p.id = :id and p.estadoValidacion = ar.edu.iessf.servife.identidad.domain.EstadoValidacion.PENDIENTE "
         + "and p.eliminadoEn is null")
-    int resolverSiPendiente(@Param("id") Long id, @Param("nuevo") EstadoValidacion nuevo, @Param("ahora") Instant ahora);
+    int resolverSiPendiente(@Param("id") Long id, @Param("nuevo") EstadoValidacion nuevo, @Param("gestor") Long gestor,
+        @Param("motivo") String motivo, @Param("ahora") Instant ahora);
 }
