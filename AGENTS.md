@@ -32,7 +32,7 @@ Antes de escribir una de estas, usá la que está. No la copies a tu módulo.
 | Saber quién hace la request | common/seguridad/UsuarioActual (uuid y rol, desde el JWT) |
 | Emitir un JWT (módulo A) | El JwtEncoder de config/JwtConfig, header HS256, claims sub = uuid y rol |
 | Hashear una contraseña | El PasswordEncoder (BCrypt) de config/SeguridadConfig |
-| Buscar una cuenta de cualquiera de los tres roles | identidad/service/Cuentas (buscarPorUuid(uuid, rol), buscarPorEmail, emailRegistrado, normalizar) y la interfaz identidad/domain/Cuenta. Nunca consultes los tres repositorios a mano |
+| Buscar una cuenta de cualquiera de los tres roles | identidad/service/Cuentas (buscarPorUuid(uuid, rol), buscarTodasPorEmail (un email puede tener cuenta de cliente y de prestador, D43), buscarPorEmailConBajas, emailRegistrado, normalizar) y la interfaz identidad/domain/Cuenta. Nunca consultes los tres repositorios a mano |
 | Revocar la sesión de un usuario (ej. al suspender una cuenta, E4) | ServicioDeTokens.revocarTodos(uuid) |
 | Mandar un correo | common/correo/EnviadorDeCorreos |
 | Rechazar un campo con 400 | common/error/ValidacionException(campo, detalle): devuelve VALIDACION con un ErrorCampo |

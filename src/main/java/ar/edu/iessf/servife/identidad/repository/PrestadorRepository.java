@@ -23,6 +23,9 @@ public interface PrestadorRepository extends JpaRepository<Prestador, Long> {
     /** El email llega ya normalizado (Cuentas.normalizar). */
     Optional<Prestador> findByEmailAndEliminadoEnIsNull(String email);
 
+    /** Incluye la dada de baja. El email es único dentro de la tabla, no entre tablas (D43). */
+    Optional<Prestador> findByEmail(String email);
+
     /** Incluye las cuentas dadas de baja: el email no se libera. */
     boolean existsByEmail(String email);
 

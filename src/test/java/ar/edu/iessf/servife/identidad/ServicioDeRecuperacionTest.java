@@ -33,15 +33,19 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import ar.edu.iessf.servife.catalogo.domain.TipoServicio;
+import ar.edu.iessf.servife.catalogo.repository.TipoServicioRepository;
 import ar.edu.iessf.servife.common.correo.EnviadorDeCorreos;
 import ar.edu.iessf.servife.common.error.NegocioException;
 import ar.edu.iessf.servife.common.error.ValidacionException;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
 import ar.edu.iessf.servife.identidad.domain.CodigoRecuperacion;
+import ar.edu.iessf.servife.identidad.domain.Prestador;
 import ar.edu.iessf.servife.identidad.dto.ConfirmarRecuperacionRequest;
 import ar.edu.iessf.servife.identidad.dto.RecuperarRequest;
 import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
 import ar.edu.iessf.servife.identidad.repository.CodigoRecuperacionRepository;
+import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 import ar.edu.iessf.servife.identidad.service.Hashes;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRecuperacion;
 import ar.edu.iessf.servife.identidad.service.ServicioDeTokens;
@@ -72,6 +76,8 @@ class ServicioDeRecuperacionTest {
     }
 
     @Autowired private ClienteRepository clientes;
+    @Autowired private PrestadorRepository prestadores;
+    @Autowired private TipoServicioRepository tiposServicio;
     @Autowired private CodigoRecuperacionRepository codigos;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private ServicioDeRecuperacion servicio;
@@ -212,6 +218,25 @@ class ServicioDeRecuperacionTest {
         assertThat(passwordEncoder.matches(NUEVA, guardada.getContrasenia())).isTrue();
         assertThat(codigos.findAll().get(0).getUsadoEn()).isNotNull();
         verify(tokens).revocarTodos(ana.getUuid());
+    }
+
+    @Test
+    void confirmarCambiaLaContraseniaDeLaCuentaDeClienteYLaDePrestadorDelMismoEmail() {
+        Cliente ana = guardarAna();
+        TipoServicio tipo = tiposServicio.findAll().get(0);
+        Prestador anaPrestadora = prestadores.saveAndFlush(
+            new Prestador("Ana Pérez", "ana@mail.com", passwordEncoder.encode(CLAVE), tipo));
+        try {
+            confirmar(pedirCodigo());
+
+            Prestador guardada = prestadores.findByUuidAndEliminadoEnIsNull(anaPrestadora.getUuid()).orElseThrow();
+            assertThat(passwordEncoder.matches(NUEVA, guardada.getContrasenia())).isTrue();
+            assertThat(contraseniaEsLaNueva()).isTrue();
+            verify(tokens).revocarTodos(ana.getUuid());
+            verify(tokens).revocarTodos(anaPrestadora.getUuid());
+        } finally {
+            prestadores.delete(anaPrestadora);
+        }
     }
 
     @Test

@@ -55,7 +55,7 @@ public class PrestadorController {
     @PreAuthorize("isAuthenticated()")
     @GetMapping
     public ResponseEntity<Pagina<PrestadorEnListaResponse>> buscar(@ModelAttribute FiltrosDeBusqueda filtros) {
-        return ResponseEntity.ok(buscador.buscar(filtros));
+        return ResponseEntity.ok(buscador.buscar(filtros, usuarioActual.uuid(), usuarioActual.rol()));
     }
 
     /** GET /prestadores/me/perfil · CU03 · Perfil de servicio propio, para precargar la pantalla. */

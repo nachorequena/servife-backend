@@ -75,15 +75,21 @@ public class ServicioDeCuenta {
         return mapper.aRespuesta(cuenta);
     }
 
-    /** A7. Con la actual incorrecta, 400 en contraseniaActual; si cambia, revoca todos los refresh. */
+    /**
+     * A7. Con la actual incorrecta, 400 en contraseniaActual. La nueva va también a la otra cuenta del
+     * mismo email (cliente y prestador, D43), y se revocan los refresh de las dos.
+     */
     @Transactional
     public void cambiarContrasenia(UUID uuid, Rol rol, CambiarContraseniaRequest pedido) {
         Cuenta cuenta = buscar(uuid, rol);
         if (!passwordEncoder.matches(pedido.contraseniaActual(), cuenta.getContrasenia())) {
             throw new ValidacionException("contraseniaActual", "no coincide");
         }
-        cuenta.cambiarContrasenia(passwordEncoder.encode(pedido.contraseniaNueva()));
-        tokens.revocarTodos(uuid);
+        String hash = passwordEncoder.encode(pedido.contraseniaNueva());
+        for (Cuenta vinculada : cuentas.buscarTodasPorEmail(cuenta.getEmail())) {
+            vinculada.cambiarContrasenia(hash);
+            tokens.revocarTodos(vinculada.getUuid());
+        }
     }
 
     private Cuenta buscar(UUID uuid, Rol rol) {

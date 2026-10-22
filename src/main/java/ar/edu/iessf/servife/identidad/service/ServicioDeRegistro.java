@@ -1,7 +1,10 @@
 package ar.edu.iessf.servife.identidad.service;
 
+import java.util.Optional;
+
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,9 +13,12 @@ import ar.edu.iessf.servife.catalogo.domain.TipoServicio;
 import ar.edu.iessf.servife.catalogo.repository.TipoServicioRepository;
 import ar.edu.iessf.servife.common.error.ConflictoException;
 import ar.edu.iessf.servife.common.error.ErrorCampo;
+import ar.edu.iessf.servife.common.error.NegocioException;
 import ar.edu.iessf.servife.common.error.ValidacionException;
+import ar.edu.iessf.servife.common.seguridad.Rol;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
 import ar.edu.iessf.servife.identidad.domain.Cuenta;
+import ar.edu.iessf.servife.identidad.domain.EstadoCuenta;
 import ar.edu.iessf.servife.identidad.domain.Prestador;
 import ar.edu.iessf.servife.identidad.dto.RegistroRequest;
 import ar.edu.iessf.servife.identidad.dto.UsuarioResponse;
@@ -43,16 +49,17 @@ public class ServicioDeRegistro {
         this.mapper = mapper;
     }
 
-    /** Un prestador nace PENDIENTE de validación; en un cliente, idTipoServicio se ignora. */
+    /**
+     * Un prestador nace PENDIENTE de validación; en un cliente, idTipoServicio se ignora. El email puede
+     * tener ya la cuenta del otro rol (D43): se crea solo si la contraseña es la de esa cuenta.
+     */
     @Transactional
     public UsuarioResponse registrar(RegistroRequest pedido) {
         String email = Cuentas.normalizar(pedido.email());
-        if (cuentas.emailRegistrado(email)) {
-            throw emailYaRegistrado();
-        }
         boolean esPrestador = ROL_PRESTADOR.equals(pedido.rol());
-        TipoServicio tipo = esPrestador ? buscarTipo(pedido) : null;
         Contrasenias.validarLargo("contrasenia", pedido.contrasenia());
+        verificarEmailDisponible(email, esPrestador ? Rol.PRESTADOR : Rol.CLIENTE, pedido.contrasenia());
+        TipoServicio tipo = esPrestador ? buscarTipo(pedido) : null;
         String hash = passwordEncoder.encode(pedido.contrasenia());
         try {
             Cuenta guardada = esPrestador
@@ -77,6 +84,30 @@ public class ServicioDeRegistro {
             }
         }
         return false;
+    }
+
+    /**
+     * D43. 409 EMAIL_YA_REGISTRADO, siempre con el mismo mensaje, si el email es de un gestor, de una
+     * cuenta del mismo rol o de una del otro rol dada de baja, o si la contraseña no es la de la cuenta
+     * del otro rol. Con la contraseña correcta y la otra cuenta suspendida, 403: no se esquiva una
+     * suspensión sumando el otro rol.
+     */
+    private void verificarEmailDisponible(String email, Rol rol, String contrasenia) {
+        Rol otroRol = rol == Rol.CLIENTE ? Rol.PRESTADOR : Rol.CLIENTE;
+        if (cuentas.buscarPorEmailConBajas(email, Rol.GESTOR).isPresent()
+                || cuentas.buscarPorEmailConBajas(email, rol).isPresent()) {
+            throw emailYaRegistrado();
+        }
+        Optional<Cuenta> otra = cuentas.buscarPorEmailConBajas(email, otroRol);
+        if (otra.isEmpty()) {
+            return;
+        }
+        if (otra.get().estaEliminado() || !passwordEncoder.matches(contrasenia, otra.get().getContrasenia())) {
+            throw emailYaRegistrado();
+        }
+        if (otra.get().getEstadoCuenta() == EstadoCuenta.SUSPENDIDA) {
+            throw new NegocioException(HttpStatus.FORBIDDEN, "CUENTA_SUSPENDIDA", "Tu cuenta está suspendida.");
+        }
     }
 
     private TipoServicio buscarTipo(RegistroRequest pedido) {

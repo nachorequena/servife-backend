@@ -143,6 +143,15 @@ class BuscadorDePrestadoresTest {
     // ─── Reglas base ────────────────────────────────────────────────────────
 
     @Test
+    void elClienteNoSeEncuentraASiMismoComoPrestador() throws Exception {
+        prestador("Otro", "Gas").guardar();
+        UUID propio = prestador("Cliente B5", "Gas").guardar();
+        jdbc.update("UPDATE prestadores SET email = 'cliente-b5@mail.com' WHERE uuid = ?", propio);
+
+        assertThat(nombresDe("")).containsExactly("Otro");
+    }
+
+    @Test
     void soloAparecenAprobadosActivosYNoDadosDeBaja() throws Exception {
         prestador("Ok Aprobado", "Gas").guardar();
         prestador("Pendiente", "Gas").validacion("PENDIENTE").guardar();

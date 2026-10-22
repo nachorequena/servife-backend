@@ -51,14 +51,14 @@ public class AuthController {
         this.usuarioActual = usuarioActual;
     }
 
-    /** A1 · POST /auth/registro · CU01 · Solo CLIENTE o PRESTADOR. Si es prestador recibe idTipoServicio y crea todo en una transacción; queda PENDIENTE. */
+    /** A1 · POST /auth/registro · CU01 · Solo CLIENTE o PRESTADOR. Si es prestador recibe idTipoServicio y crea todo en una transacción; queda PENDIENTE. Con el email de una cuenta del otro rol, solo con su misma contraseña (D43). */
     @PreAuthorize("permitAll()")
     @PostMapping("/registro")
     public ResponseEntity<UsuarioResponse> registrar(@Valid @RequestBody RegistroRequest pedido) {
         return ResponseEntity.status(HttpStatus.CREATED).body(registro.registrar(pedido));
     }
 
-    /** A2 · POST /auth/login · CU02 · Único login para los tres roles. Devuelve access + refresh y el rol. */
+    /** A2 · POST /auth/login · CU02 · Único login para los tres roles. Devuelve access + refresh y el rol. rol opcional: con cuenta de cliente y de prestador en el mismo email, sin rol responde 409 ELEGIR_ROL (D43). */
     @PreAuthorize("permitAll()")
     @PostMapping("/login")
     public ResponseEntity<TokensResponse> iniciarSesion(@Valid @RequestBody LoginRequest pedido) {

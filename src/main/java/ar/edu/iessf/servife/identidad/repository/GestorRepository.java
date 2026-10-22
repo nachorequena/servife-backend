@@ -12,6 +12,9 @@ public interface GestorRepository extends JpaRepository<Gestor, Long> {
     /** El email llega ya normalizado (Cuentas.normalizar). */
     Optional<Gestor> findByEmailAndEliminadoEnIsNull(String email);
 
+    /** Incluye la dada de baja. */
+    Optional<Gestor> findByEmail(String email);
+
     /** Incluye las cuentas dadas de baja: el email no se libera. */
     boolean existsByEmail(String email);
 

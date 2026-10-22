@@ -245,6 +245,20 @@ class ServicioDeSolicitudesTest {
     }
 
     @Test
+    void laCuentaDePrestadorDelMismoEmailDelClienteNoEstaDisponible() throws Exception {
+        TipoServicio tipo = tiposServicio.findByEliminadoEnIsNullOrderByNombre().get(0);
+        Prestador anaPrestadora = new Prestador("Ana Pérez", ana.getEmail(), "hash", tipo);
+        anaPrestadora.setEstadoValidacion(EstadoValidacion.APROBADO);
+        anaPrestadora = prestadores.save(anaPrestadora);
+        disponibilidad.save(new Disponibilidad(anaPrestadora, 5));
+
+        crear(ana, cuerpo(anaPrestadora.getUuid(), "2026-10-09", List.of()))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errores[0].campo").value("uuidPrestador"))
+            .andExpect(jsonPath("$.errores[0].detalle").value("no está disponible"));
+    }
+
+    @Test
     void prestadorPendienteEs400EnUuidPrestador() throws Exception {
         beto.setEstadoValidacion(EstadoValidacion.PENDIENTE);
         prestadores.save(beto);
