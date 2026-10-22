@@ -37,6 +37,7 @@ import ar.edu.iessf.servife.gestion.controller.AdminValidacionController;
 import ar.edu.iessf.servife.gestion.dto.Decision;
 import ar.edu.iessf.servife.gestion.dto.PrestadorPendienteResponse;
 import ar.edu.iessf.servife.gestion.dto.ValidacionResponse;
+import ar.edu.iessf.servife.gestion.service.ServicioDeDocumentos;
 import ar.edu.iessf.servife.gestion.service.ServicioDeValidacion;
 import ar.edu.iessf.servife.identidad.domain.EstadoValidacion;
 
@@ -57,6 +58,7 @@ class AdminValidacionControllerTest {
 
     @Autowired private MockMvc mvc;
     @MockitoBean private ServicioDeValidacion servicio;
+    @MockitoBean private ServicioDeDocumentos documentos;
 
     private static JwtRequestPostProcessor como(String rol) {
         UUID sujeto = "GESTOR".equals(rol) ? GESTOR : UUID.randomUUID();
