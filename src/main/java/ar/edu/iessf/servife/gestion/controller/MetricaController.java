@@ -1,27 +1,31 @@
 package ar.edu.iessf.servife.gestion.controller;
 
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import ar.edu.iessf.servife.common.error.NoImplementadoException;
+import ar.edu.iessf.servife.gestion.dto.MetricasResponse;
+import ar.edu.iessf.servife.gestion.service.ServicioDeMetricas;
 
 /**
- * Módulo E — Gestión, validación y mensajería (dueño: Ignacio Requena).
+ * Módulo E — Métricas del dashboard (dueño: Ignacio Requena).
  * Endpoints según servife-ia/.ai/05-api-contract.md; los IDs son los del prototipo.
- * Cada método es un stub que responde 501 hasta que se implemente: definí los DTOs en dto/,
- * la lógica en service/ y reemplazá el throw.
  */
 @PreAuthorize("hasRole('GESTOR')")
 @RestController
 @RequestMapping("/admin/metricas")
 public class MetricaController {
 
-    /** E9 · GET /admin/metricas · CU12 · Contadores del dashboard: servicios activos y validaciones pendientes (D05). */
+    private final ServicioDeMetricas servicio;
+
+    public MetricaController(ServicioDeMetricas servicio) {
+        this.servicio = servicio;
+    }
+
+    /** E9 · GET /admin/metricas · CU12 · Servicios activos, solicitudes pendientes y validaciones pendientes. Sin incidencias (D05). */
     @GetMapping
-    public ResponseEntity<Void> obtener() {
-        throw new NoImplementadoException("E9");
+    public MetricasResponse obtener() {
+        return servicio.obtener();
     }
 }
