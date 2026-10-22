@@ -23,7 +23,7 @@ import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 
 /**
  * E5 y E6 · CU14 (versión mínima, sin documentos): lista los prestadores pendientes y deja que el
- * gestor los apruebe o rechace, avisándoles y dejando quién decidió, cuándo y con qué motivo (V7).
+ * gestor los apruebe o rechace, avisándoles y dejando quién decidió, cuándo y con qué motivo (V9).
  * La suspensión de la cuenta no interviene: el gestor decide la validación de forma independiente.
  */
 @Service
