@@ -43,11 +43,7 @@ public class ServicioDeFichaDePrestador {
     /** 404 si no existe, está dado de baja, no está APROBADO, su cuenta está SUSPENDIDA o su tipo de servicio fue dado de baja. */
     @Transactional(readOnly = true)
     public PrestadorDetalleResponse obtener(UUID uuid) {
-        Prestador p = prestadores.findByUuidAndEliminadoEnIsNull(uuid)
-            .filter(x -> x.getEstadoValidacion() == EstadoValidacion.APROBADO
-                && x.getEstadoCuenta() == EstadoCuenta.ACTIVA)
-            .filter(x -> !x.getTipoServicio().estaEliminado())
-            .orElseThrow(() -> new RecursoNoEncontradoException("No existe."));
+        Prestador p = visible(uuid);
         TipoServicio t = p.getTipoServicio();
         List<Integer> dias = disponibilidades.findByPrestadorAndEliminadoEnIsNullOrderByDiaSemana(p).stream()
             .map(Disponibilidad::getDiaSemana).toList();
@@ -56,5 +52,18 @@ public class ServicioDeFichaDePrestador {
             new TipoServicioResponse(t.getUuid(), t.getNombre(), t.getIcono(), t.isRequiereMatricula()),
             p.getZona(), p.getDescripcion(), dias, p.getValoracionPromedio(),
             realizados == null ? 0 : realizados, true);
+    }
+
+    /**
+     * El prestador si lo puede ver cualquier usuario autenticado (criterio de B6); si no, 404. Lo usan
+     * también las reseñas (D2) y los trabajos realizados (D3).
+     */
+    @Transactional(readOnly = true)
+    public Prestador visible(UUID uuid) {
+        return prestadores.findByUuidAndEliminadoEnIsNull(uuid)
+            .filter(x -> x.getEstadoValidacion() == EstadoValidacion.APROBADO
+                && x.getEstadoCuenta() == EstadoCuenta.ACTIVA)
+            .filter(x -> !x.getTipoServicio().estaEliminado())
+            .orElseThrow(() -> new RecursoNoEncontradoException("No existe."));
     }
 }
