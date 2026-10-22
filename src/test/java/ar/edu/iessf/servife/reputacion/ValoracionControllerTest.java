@@ -1,6 +1,8 @@
 package ar.edu.iessf.servife.reputacion;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -21,6 +23,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import ar.edu.iessf.servife.common.error.ConflictoException;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.common.error.RecursoNoEncontradoException;
 import ar.edu.iessf.servife.common.paginacion.Pagina;
@@ -31,7 +34,7 @@ import ar.edu.iessf.servife.reputacion.controller.ValoracionController;
 import ar.edu.iessf.servife.reputacion.dto.ValoracionResponse;
 import ar.edu.iessf.servife.reputacion.service.ServicioDeValoraciones;
 
-/** D2 por HTTP. D1 sigue en 501 hasta que exista FINALIZADA → VALORADA. */
+/** D1 y D2 por HTTP: validación del cuerpo, roles y códigos. */
 @WebMvcTest(controllers = ValoracionController.class)
 @Import({SeguridadConfig.class, JwtConfig.class, CorsConfig.class, EscritorDeErrores.class})
 @TestPropertySource(properties = {
@@ -88,11 +91,72 @@ class ValoracionControllerTest {
             .andExpect(status().isNotFound());
     }
 
+    // ── D1 ────────────────────────────────────────────────────────────────────
+
+    private static String rutaValorar(UUID solicitud) {
+        return CONTEXTO + "/solicitudes/" + solicitud + "/valoracion";
+    }
+
     @Test
-    void valorarTodaviaNoEstaImplementado() throws Exception {
-        mvc.perform(post(CONTEXTO + "/solicitudes/" + UUID.randomUUID() + "/valoracion").contextPath(CONTEXTO)
-                .with(como("CLIENTE")))
-            .andExpect(status().isNotImplemented())
-            .andExpect(jsonPath("$.codigo").value("NO_IMPLEMENTADO"));
+    void valorarDevuelve201ConLaResena() throws Exception {
+        UUID solicitud = UUID.randomUUID();
+        UUID resena = UUID.randomUUID();
+        when(servicio.valorar(eq(solicitud), any())).thenReturn(
+            new ValoracionResponse(resena, 5, "Impecable", "Ana Pérez", Instant.parse("2026-10-22T12:00:00Z")));
+
+        mvc.perform(post(rutaValorar(solicitud)).contextPath(CONTEXTO).with(como("CLIENTE"))
+                .contentType("application/json").content("{\"puntaje\":5,\"comentario\":\"Impecable\"}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.uuid").value(resena.toString()))
+            .andExpect(jsonPath("$.puntaje").value(5))
+            .andExpect(jsonPath("$.comentario").value("Impecable"))
+            .andExpect(jsonPath("$.nombreCliente").value("Ana Pérez"));
+    }
+
+    @Test
+    void valorarSinPuntajeEs400() throws Exception {
+        mvc.perform(post(rutaValorar(UUID.randomUUID())).contextPath(CONTEXTO).with(como("CLIENTE"))
+                .contentType("application/json").content("{\"comentario\":\"Bien\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.codigo").value("VALIDACION"))
+            .andExpect(jsonPath("$.errores[0].campo").value("puntaje"));
+    }
+
+    @Test
+    void valorarConPuntajeFueraDeRangoEs400() throws Exception {
+        for (int puntaje : new int[] {0, 6}) {
+            mvc.perform(post(rutaValorar(UUID.randomUUID())).contextPath(CONTEXTO).with(como("CLIENTE"))
+                    .contentType("application/json").content("{\"puntaje\":" + puntaje + "}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errores[0].campo").value("puntaje"));
+        }
+    }
+
+    @Test
+    void valorarConComentarioDeMasDe500Es400() throws Exception {
+        mvc.perform(post(rutaValorar(UUID.randomUUID())).contextPath(CONTEXTO).with(como("CLIENTE"))
+                .contentType("application/json").content("{\"puntaje\":4,\"comentario\":\"" + "a".repeat(501) + "\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errores[0].campo").value("comentario"));
+    }
+
+    @Test
+    void elPrestadorNoPuedeValorar() throws Exception {
+        mvc.perform(post(rutaValorar(UUID.randomUUID())).contextPath(CONTEXTO).with(como("PRESTADOR"))
+                .contentType("application/json").content("{\"puntaje\":5}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.codigo").value("ACCESO_DENEGADO"));
+    }
+
+    @Test
+    void valorarUnaSolicitudNoFinalizadaEs409() throws Exception {
+        UUID solicitud = UUID.randomUUID();
+        when(servicio.valorar(eq(solicitud), any()))
+            .thenThrow(new ConflictoException("TRANSICION_INVALIDA", "Solo se puede valorar una solicitud finalizada."));
+
+        mvc.perform(post(rutaValorar(solicitud)).contextPath(CONTEXTO).with(como("CLIENTE"))
+                .contentType("application/json").content("{\"puntaje\":5}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
     }
 }
