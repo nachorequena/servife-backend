@@ -56,6 +56,8 @@ public class ServicioDeSolicitudes {
 
     private static final ZoneId ARGENTINA = ZoneId.of("America/Argentina/Buenos_Aires");
     private static final int LARGO_DESCRIPCION_EN_LISTA = 140;
+    /** Motivo que guarda NO_SE_PRESENTO (D07); el cliente no lo escribe. */
+    static final String MOTIVO_NO_SE_PRESENTO = "El prestador no se presentó";
     private static final DateTimeFormatter DIA_MES_ANIO = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final SolicitudRepository solicitudes;
@@ -167,7 +169,7 @@ public class ServicioDeSolicitudes {
         EstadoSolicitud origen = s.getEstado();
         EstadoSolicitud destino = MaquinaDeEstados.destino(origen, accion, rol);
 
-        if (accion == AccionSobreSolicitud.INICIAR && s.getFechaDeseada() != null
+        if (accion.requiereLlegarLaFecha() && s.getFechaDeseada() != null
                 && hoyEnArgentina().isBefore(s.getFechaDeseada())) {
             throw new ConflictoException("TODAVIA_NO_ES_LA_FECHA", "Todavía no llegó la fecha del trabajo.");
         }
@@ -180,21 +182,47 @@ public class ServicioDeSolicitudes {
             throw new ValidacionException("motivo", "solo se puede indicar al rechazar o cancelar");
         }
 
+        if (accion == AccionSobreSolicitud.NO_SE_PRESENTO) {
+            motivo = MOTIVO_NO_SE_PRESENTO;
+        }
+
         int filas = solicitudes.cambiarEstado(s.getId(), origen, destino, motivo,
-            accion == AccionSobreSolicitud.CANCELAR ? rol : null, pedido.precioAcordado(), clock.instant());
+            destino == EstadoSolicitud.CANCELADA ? rol : null, pedido.precioAcordado(), clock.instant());
         if (filas == 0) {
             throw new ConflictoException("TRANSICION_INVALIDA", "La solicitud cambió mientras tanto. Recargala.");
         }
 
         // el UPDATE limpió el contexto: se recarga para responder y para avisar con los datos vigentes
         Solicitud actual = solicitudes.findDetalleByUuidAndEliminadoEnIsNull(uuid).orElseThrow();
-        avisarCambio(actual, destino, rol);
+        avisarCambio(actual, accion, destino, rol);
         return SolicitudMapper.aRespuesta(actual, solicitudes.uuidsDeImagenes(actual.getId()), rol, hoyEnArgentina(),
             chats.uuidDelChat(actual));
     }
 
+    /**
+     * FINALIZADA → VALORADA (D07). No es una acción de C4: la llama la valoración (D1, porción 3) en su
+     * misma transacción, después de guardar la reseña. El usuario actual tiene que ser el cliente de la
+     * solicitud (si no, 404) y la solicitud tiene que estar FINALIZADA; así una solicitud se valora una
+     * sola vez. No manda aviso.
+     */
+    @Transactional
+    public void marcarComoValorada(UUID uuid) {
+        if (usuarioActual.rol() != Rol.CLIENTE) {
+            throw new RecursoNoEncontradoException("No existe.");
+        }
+        Solicitud s = parteDe(uuid, Rol.CLIENTE);
+        if (s.getEstado() != EstadoSolicitud.FINALIZADA) {
+            throw new ConflictoException("TRANSICION_INVALIDA", "Solo se puede valorar una solicitud finalizada.");
+        }
+        int filas = solicitudes.cambiarEstado(s.getId(), EstadoSolicitud.FINALIZADA, EstadoSolicitud.VALORADA, null,
+            null, null, clock.instant());
+        if (filas == 0) {
+            throw new ConflictoException("TRANSICION_INVALIDA", "La solicitud cambió mientras tanto. Recargala.");
+        }
+    }
+
     /** Aviso a la otra parte: quién actuó, qué hizo, y motivo o precio si hay. */
-    private void avisarCambio(Solicitud s, EstadoSolicitud destino, Rol actor) {
+    private void avisarCambio(Solicitud s, AccionSobreSolicitud accion, EstadoSolicitud destino, Rol actor) {
         boolean actuoElCliente = actor == Rol.CLIENTE;
         Cuenta quien = actuoElCliente ? s.getCliente() : s.getPrestador();
         Cuenta destinatario = actuoElCliente ? s.getPrestador() : s.getCliente();
@@ -205,17 +233,19 @@ public class ServicioDeSolicitudes {
             case ACEPTADA -> { tipo = TipoDeAviso.SOLICITUD_ACEPTADA; titulo = "Aceptaron tu solicitud"; verbo = "aceptó"; }
             case RECHAZADA -> { tipo = TipoDeAviso.SOLICITUD_RECHAZADA; titulo = "Rechazaron tu solicitud"; verbo = "rechazó"; }
             case EN_CURSO -> { tipo = TipoDeAviso.SOLICITUD_EN_CURSO; titulo = "Empezó el trabajo"; verbo = "inició"; }
-            case FINALIZADA -> { tipo = TipoDeAviso.SOLICITUD_FINALIZADA; titulo = "Terminó el trabajo"; verbo = "finalizó"; }
+            case FINALIZADA -> { tipo = TipoDeAviso.SOLICITUD_FINALIZADA; titulo = "Terminó el trabajo"; verbo = actuoElCliente ? "dio por realizada" : "finalizó"; }
             case CANCELADA -> { tipo = TipoDeAviso.SOLICITUD_CANCELADA; titulo = "Cancelaron la solicitud"; verbo = "canceló"; }
             default -> throw new IllegalStateException("Sin aviso para " + destino);
         }
-        StringBuilder cuerpo = new StringBuilder(quien.getNombreApellido()).append(' ').append(verbo)
-            .append(" la solicitud");
+        boolean ausente = accion == AccionSobreSolicitud.NO_SE_PRESENTO;
+        StringBuilder cuerpo = new StringBuilder(quien.getNombreApellido()).append(' ')
+            .append(ausente ? "indicó que no te presentaste a" : verbo).append(" la solicitud");
         if (s.getFechaDeseada() != null) {
             cuerpo.append(" del ").append(s.getFechaDeseada().format(DIA_MES_ANIO));
         }
         cuerpo.append('.');
-        if (s.getMotivo() != null && (destino == EstadoSolicitud.RECHAZADA || destino == EstadoSolicitud.CANCELADA)) {
+        if (!ausente && s.getMotivo() != null
+                && (destino == EstadoSolicitud.RECHAZADA || destino == EstadoSolicitud.CANCELADA)) {
             cuerpo.append(" Motivo: ").append(s.getMotivo());
         }
         if (destino == EstadoSolicitud.ACEPTADA && s.getPrecioAcordado() != null) {
