@@ -87,7 +87,8 @@ public class ServicioDeRegistro {
             .orElseThrow(() -> new ValidacionException("idTipoServicio", "no existe"));
     }
 
-    private static ConflictoException emailYaRegistrado() {
+    /** 409 EMAIL_YA_REGISTRADO con el campo email; también lo usan el alta y la edición del gestor (E13, E14). */
+    public static ConflictoException emailYaRegistrado() {
         return new ConflictoException("EMAIL_YA_REGISTRADO", "Ese correo ya tiene una cuenta.",
             new ErrorCampo("email", "ya existe"));
     }

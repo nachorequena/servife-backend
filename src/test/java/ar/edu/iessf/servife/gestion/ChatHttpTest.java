@@ -201,9 +201,9 @@ class ChatHttpTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"texto\":\"hola\"}"))
             .andExpect(status().isNotFound());
         assertThat(leer(get(API + "/conversaciones"), comoIntruso).get("totalElementos").asLong()).isZero();
-        // Mismo uuid con otro rol: tampoco es parte.
+        // Mismo uuid con otro rol: esa cuenta no existe, y FiltroDeCuentaActiva corta con 401.
         mvc.perform(get(API + "/chats/" + chat + "/mensajes").contextPath(API).with(como(ana.getUuid(), "PRESTADOR")))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -25,6 +25,8 @@ import ar.edu.iessf.servife.catalogo.service.TipoServicioService;
 import ar.edu.iessf.servife.common.error.EscritorDeErrores;
 import ar.edu.iessf.servife.common.seguridad.UsuarioActual;
 import ar.edu.iessf.servife.gestion.controller.AdminUsuarioController;
+import ar.edu.iessf.servife.gestion.controller.DispositivoController;
+import ar.edu.iessf.servife.gestion.service.ServicioDeUsuarios;
 import ar.edu.iessf.servife.identidad.controller.AuthController;
 import ar.edu.iessf.servife.identidad.service.ServicioDeCuenta;
 import ar.edu.iessf.servife.identidad.service.ServicioDeRecuperacion;
@@ -36,7 +38,7 @@ import ar.edu.iessf.servife.identidad.service.ServicioDeSesion;
  * No prueba lógica de ningún módulo: cada dueño escribe los tests de sus endpoints.
  */
 @WebMvcTest(controllers = {TipoServicioController.class, PrestadorController.class, AdminUsuarioController.class,
-    AuthController.class})
+    DispositivoController.class, AuthController.class})
 @Import({SeguridadConfig.class, JwtConfig.class, CorsConfig.class, EscritorDeErrores.class})
 @TestPropertySource(properties = {
     "servife.jwt.secreto=secreto-de-prueba-de-al-menos-32-caracteres",
@@ -78,6 +80,9 @@ class SeguridadYErroresTest {
     @MockitoBean
     private ServicioDeFichaDePrestador fichaDePrestador;
 
+    @MockitoBean
+    private ServicioDeUsuarios servicioDeUsuarios;
+
     private static JwtRequestPostProcessor como(String rol) {
         return jwt()
             .jwt(j -> j.subject("7f1c2d4e-0000-4000-8000-000000000001").claim(JwtConfig.CLAIM_ROL, rol))
@@ -111,7 +116,7 @@ class SeguridadYErroresTest {
 
     @Test
     void endpointSinImplementarDevuelve501() throws Exception {
-        mvc.perform(get(CONTEXTO + "/admin/usuarios").contextPath(CONTEXTO).with(como("GESTOR")))
+        mvc.perform(post(CONTEXTO + "/dispositivos").contextPath(CONTEXTO).with(como("CLIENTE")))
             .andExpect(status().isNotImplemented())
             .andExpect(jsonPath("$.codigo").value("NO_IMPLEMENTADO"));
     }
@@ -119,7 +124,7 @@ class SeguridadYErroresTest {
     @Test
     void gestorPasaElFiltroDeAdmin() throws Exception {
         mvc.perform(get(CONTEXTO + "/admin/usuarios").contextPath(CONTEXTO).with(como("GESTOR")))
-            .andExpect(status().isNotImplemented());
+            .andExpect(status().isOk());
     }
 
     @Test

@@ -31,7 +31,9 @@ import ar.edu.iessf.servife.config.JwtConfig;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
 import ar.edu.iessf.servife.identidad.domain.EstadoValidacion;
 import ar.edu.iessf.servife.identidad.domain.Prestador;
+import ar.edu.iessf.servife.identidad.domain.Gestor;
 import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
+import ar.edu.iessf.servife.identidad.repository.GestorRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
 import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
@@ -53,6 +55,7 @@ class ListadoYDetalleDeSolicitudesTest {
 
     @Autowired private MockMvc mvc;
     @Autowired private ClienteRepository clientes;
+    @Autowired private GestorRepository gestores;
     @Autowired private PrestadorRepository prestadores;
     @Autowired private TipoServicioRepository tiposServicio;
     @Autowired private SolicitudRepository solicitudes;
@@ -99,6 +102,11 @@ class ListadoYDetalleDeSolicitudesTest {
     private static JwtRequestPostProcessor como(UUID uuid, String rol) {
         return jwt().jwt(j -> j.subject(uuid.toString()).claim(JwtConfig.CLAIM_ROL, rol))
             .authorities(new SimpleGrantedAuthority("ROLE_" + rol));
+    }
+
+    /** Un gestor que existe: FiltroDeCuentaActiva corta con 401 los tokens de cuentas inexistentes. */
+    private UUID gestorReal() {
+        return gestores.save(new Gestor("Gestor", UUID.randomUUID() + "@mail.com", "hash")).getUuid();
     }
 
     @Test
@@ -241,10 +249,11 @@ class ListadoYDetalleDeSolicitudesTest {
 
     @Test
     void gestorRecibe403EnAmbos() throws Exception {
-        mvc.perform(get(API + "/solicitudes").contextPath(API).with(como(UUID.randomUUID(), "GESTOR")))
+        UUID gestor = gestorReal();
+        mvc.perform(get(API + "/solicitudes").contextPath(API).with(como(gestor, "GESTOR")))
             .andExpect(status().isForbidden());
         mvc.perform(get(API + "/solicitudes/" + UUID.randomUUID()).contextPath(API)
-                .with(como(UUID.randomUUID(), "GESTOR")))
+                .with(como(gestor, "GESTOR")))
             .andExpect(status().isForbidden());
     }
 

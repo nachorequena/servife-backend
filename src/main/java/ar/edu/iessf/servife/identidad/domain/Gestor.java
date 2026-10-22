@@ -61,6 +61,11 @@ public class Gestor extends EntidadBase implements Cuenta {
     }
 
     @Override
+    public void cambiarEmail(String email) {
+        this.email = Cuentas.normalizar(email);
+    }
+
+    @Override
     public String getNombreApellido() {
         return nombreApellido;
     }
@@ -84,6 +89,7 @@ public class Gestor extends EntidadBase implements Cuenta {
         return estadoCuenta;
     }
 
+    @Override
     public void setEstadoCuenta(EstadoCuenta estadoCuenta) {
         this.estadoCuenta = estadoCuenta;
     }

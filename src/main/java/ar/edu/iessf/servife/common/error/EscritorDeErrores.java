@@ -38,6 +38,12 @@ public class EscritorDeErrores {
             "Tu rol no permite esta operación.", request.getRequestURI()));
     }
 
+    /** 403 de una cuenta suspendida con sesión abierta (FiltroDeCuentaActiva); mismo código y mensaje que el login. */
+    public void cuentaSuspendida(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        escribir(response, ErrorRespuesta.de(HttpStatus.FORBIDDEN.value(), "CUENTA_SUSPENDIDA",
+            "Tu cuenta está suspendida.", request.getRequestURI()));
+    }
+
     private void escribir(HttpServletResponse response, ErrorRespuesta error) throws IOException {
         response.setStatus(error.status());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

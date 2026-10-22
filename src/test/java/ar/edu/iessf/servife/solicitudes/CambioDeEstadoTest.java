@@ -64,7 +64,9 @@ import ar.edu.iessf.servife.config.JwtConfig;
 import ar.edu.iessf.servife.identidad.domain.Cliente;
 import ar.edu.iessf.servife.identidad.domain.EstadoValidacion;
 import ar.edu.iessf.servife.identidad.domain.Prestador;
+import ar.edu.iessf.servife.identidad.domain.Gestor;
 import ar.edu.iessf.servife.identidad.repository.ClienteRepository;
+import ar.edu.iessf.servife.identidad.repository.GestorRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 import ar.edu.iessf.servife.solicitudes.domain.EstadoSolicitud;
 import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
@@ -83,6 +85,11 @@ class CambioDeEstadoTest {
     private static final Instant ESA_NOCHE = Instant.parse("2026-10-09T03:30:00Z");
 
     /** Reloj fijo; el día del trabajo de los escenarios es el 9/10/2026. */
+    /** Un gestor que existe: FiltroDeCuentaActiva corta con 401 los tokens de cuentas inexistentes. */
+    private UUID gestorReal() {
+        return gestores.save(new Gestor("Gestor", UUID.randomUUID() + "@mail.com", "hash")).getUuid();
+    }
+
     @TestConfiguration
     static class RelojFijo {
         @Bean
@@ -98,6 +105,7 @@ class CambioDeEstadoTest {
 
     @Autowired private MockMvc mvc;
     @Autowired private ClienteRepository clientes;
+    @Autowired private GestorRepository gestores;
     @Autowired private PrestadorRepository prestadores;
     @Autowired private TipoServicioRepository tiposServicio;
     @Autowired private SolicitudRepository solicitudes;
@@ -350,7 +358,7 @@ class CambioDeEstadoTest {
 
         patchear(s, como(otro.getUuid(), "PRESTADOR"), "{\"accion\":\"ACEPTAR\"}").andExpect(status().isNotFound());
         patchear(s, como(otraCliente.getUuid(), "CLIENTE"), "{\"accion\":\"CANCELAR\"}").andExpect(status().isNotFound());
-        patchear(s, como(UUID.randomUUID(), "GESTOR"), "{\"accion\":\"ACEPTAR\"}").andExpect(status().isForbidden());
+        patchear(s, como(gestorReal(), "GESTOR"), "{\"accion\":\"ACEPTAR\"}").andExpect(status().isForbidden());
         mvc.perform(patch(API + "/solicitudes/" + UUID.randomUUID() + "/estado").contextPath(API)
                 .contentType("application/json").content("{\"accion\":\"ACEPTAR\"}").with(comoBeto()))
             .andExpect(status().isNotFound());
