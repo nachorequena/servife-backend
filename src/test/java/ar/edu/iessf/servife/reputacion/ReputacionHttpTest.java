@@ -1,5 +1,6 @@
 package ar.edu.iessf.servife.reputacion;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.matchesPattern;
@@ -14,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -55,7 +57,7 @@ import ar.edu.iessf.servife.solicitudes.domain.Solicitud;
 import ar.edu.iessf.servife.solicitudes.domain.SolicitudDePrueba;
 import ar.edu.iessf.servife.solicitudes.repository.SolicitudRepository;
 
-/** D2, D3, D4, D5, D6 y D8 de punta a punta contra PostgreSQL real (reglas de negocio, V8 y consultas). */
+/** D1, D2, D3, D4, D5, D6 y D8 de punta a punta contra PostgreSQL real (reglas de negocio, V8 y consultas). */
 @SpringBootTest(properties = "servife.jwt.secreto=secreto-de-prueba-de-al-menos-32-caracteres")
 @AutoConfigureMockMvc
 @Testcontainers(disabledWithoutDocker = true)
@@ -386,5 +388,75 @@ class ReputacionHttpTest {
         mvc.perform(get(API + "/prestadores/" + pendiente.getUuid() + "/valoraciones").contextPath(API)
                 .with(como(ana.getUuid(), "CLIENTE")))
             .andExpect(status().isNotFound());
+    }
+
+    // ── D1 ────────────────────────────────────────────────────────────────────
+
+    private ResultActions valorar(Cliente c, Solicitud s, String cuerpo) throws Exception {
+        return mvc.perform(post(API + "/solicitudes/" + s.getUuid() + "/valoracion").contextPath(API)
+            .with(como(c.getUuid(), "CLIENTE")).contentType("application/json").content(cuerpo));
+    }
+
+    private String estadoDe(Solicitud s) {
+        return jdbc.queryForObject("SELECT estado FROM solicitudes_servicio WHERE id_solicitud = ?", String.class, s.getId());
+    }
+
+    private BigDecimal promedioDe(Prestador p) {
+        return jdbc.queryForObject("SELECT valoracion_promedio FROM prestadores WHERE id_prestador = ?",
+            BigDecimal.class, p.getId());
+    }
+
+    @Test
+    void valorarGuardaLaResenaPasaAValoradaYRecalculaElPromedio() throws Exception {
+        Solicitud primera = solicitud(ana, beto, EstadoSolicitud.FINALIZADA);
+        Solicitud segunda = solicitud(ana, beto, EstadoSolicitud.FINALIZADA);
+
+        valorar(ana, primera, "{\"puntaje\":5,\"comentario\":\"  Impecable  \"}")
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.uuid").exists())
+            .andExpect(jsonPath("$.puntaje").value(5))
+            .andExpect(jsonPath("$.comentario").value("Impecable"))
+            .andExpect(jsonPath("$.nombreCliente").value("Ana Pérez"))
+            .andExpect(jsonPath("$.creadoEn").exists());
+        assertThat(estadoDe(primera)).isEqualTo("VALORADA");
+        assertThat(promedioDe(beto)).isEqualByComparingTo("5.0");
+
+        valorar(ana, segunda, "{\"puntaje\":2,\"comentario\":\"   \"}")
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.comentario").value(nullValue()));
+        assertThat(promedioDe(beto)).isEqualByComparingTo("3.5");
+        assertThat(promedioDe(carla)).isNull();
+    }
+
+    @Test
+    void valorarDosVecesEs409YNoDuplica() throws Exception {
+        Solicitud s = solicitud(ana, beto, EstadoSolicitud.FINALIZADA);
+        valorar(ana, s, "{\"puntaje\":4}").andExpect(status().isCreated());
+
+        valorar(ana, s, "{\"puntaje\":1}")
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+        assertThat(promedioDe(beto)).isEqualByComparingTo("4.0");
+        assertThat(jdbc.queryForObject(
+            "SELECT count(*) FROM valoraciones WHERE id_solicitud = ?", Long.class, s.getId())).isEqualTo(1L);
+    }
+
+    @Test
+    void valorarUnaSolicitudQueNoEstaFinalizadaEs409() throws Exception {
+        Solicitud enCurso = solicitud(ana, beto, EstadoSolicitud.EN_CURSO);
+
+        valorar(ana, enCurso, "{\"puntaje\":5}")
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+        assertThat(estadoDe(enCurso)).isEqualTo("EN_CURSO");
+    }
+
+    @Test
+    void valorarUnaSolicitudAjenaEs404() throws Exception {
+        Cliente luis = clientes.save(new Cliente("Luis Gómez", UUID.randomUUID() + "@mail.com", "hash"));
+        Solicitud deLuis = solicitud(luis, beto, EstadoSolicitud.FINALIZADA);
+
+        valorar(ana, deLuis, "{\"puntaje\":5}").andExpect(status().isNotFound());
+        assertThat(estadoDe(deLuis)).isEqualTo("FINALIZADA");
     }
 }
