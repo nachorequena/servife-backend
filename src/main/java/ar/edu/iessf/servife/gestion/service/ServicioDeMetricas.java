@@ -60,7 +60,7 @@ public class ServicioDeMetricas {
             metricas.topPrestadores(periodo.desde(), periodo.hasta(), TOP_PRESTADORES));
     }
 
-    /** Período validado; lo comparte el dashboard del prestador (E10). */
+    /** Período validado; lo comparte el dashboard del prestador (E16). */
     Periodo periodo(LocalDate desde, LocalDate hasta) {
         LocalDate hoy = LocalDate.now(reloj.withZone(ARGENTINA));
         LocalDate fin = hasta == null ? hoy : hasta;

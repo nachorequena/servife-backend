@@ -14,7 +14,7 @@ import ar.edu.iessf.servife.gestion.dto.MetricasResponse;
  * Conteos de E9 en una sola consulta, sin cargar entidades de otras porciones. Solicitudes y prestadores
  * dados de baja no cuentan; las validaciones pendientes son las mismas que lista E5 (cualquier estado de cuenta).
  *
- * <p>Los agregados por período (E9b para el gestor, E10 para el prestador) filtran por la fecha de creación
+ * <p>Los agregados por período (E9b para el gestor, E16 para el prestador) filtran por la fecha de creación
  * de la solicitud en hora de Argentina. {@code idPrestador} null = todos los prestadores (vista del gestor).
  */
 @Repository
@@ -77,6 +77,16 @@ public class MetricasRepository {
             + " FROM solicitudes_servicio s WHERE" + DEL_PERIODO + " GROUP BY 1",
             (rs, i) -> new ConteoPorNombre(rs.getString("nombre"), rs.getLong("cantidad")),
             desde, hasta, idPrestador, idPrestador);
+    }
+
+    /** Los clientes de un prestador con más solicitudes en el período (incluye clientes dados de baja: es su historial). */
+    public List<ConteoPorNombre> porCliente(LocalDate desde, LocalDate hasta, long idPrestador, int limite) {
+        return jdbc.query("SELECT c.nombre_apellido AS nombre, count(*) AS cantidad"
+            + " FROM solicitudes_servicio s JOIN clientes c ON c.id_cliente = s.id_cliente"
+            + " WHERE" + DEL_PERIODO
+            + " GROUP BY c.id_cliente, c.nombre_apellido ORDER BY cantidad DESC, c.nombre_apellido LIMIT ?",
+            (rs, i) -> new ConteoPorNombre(rs.getString("nombre"), rs.getLong("cantidad")),
+            desde, hasta, idPrestador, idPrestador, limite);
     }
 
     /** Los prestadores vigentes con más trabajos realizados en el período. */
