@@ -1,5 +1,6 @@
 package ar.edu.iessf.servife.identidad.service;
 
+import java.util.Objects;
 import java.util.UUID;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,13 +27,15 @@ public class ServicioDeCuenta {
     private final UsuarioMapper mapper;
     private final PasswordEncoder passwordEncoder;
     private final ServicioDeTokens tokens;
+    private final ServicioDeDirecciones direcciones;
 
     public ServicioDeCuenta(Cuentas cuentas, UsuarioMapper mapper, PasswordEncoder passwordEncoder,
-        ServicioDeTokens tokens) {
+        ServicioDeTokens tokens, ServicioDeDirecciones direcciones) {
         this.cuentas = cuentas;
         this.mapper = mapper;
         this.passwordEncoder = passwordEncoder;
         this.tokens = tokens;
+        this.direcciones = direcciones;
     }
 
     /** A4. Cuenta inexistente o dada de baja con token todavía válido: 404. */
@@ -55,8 +58,11 @@ public class ServicioDeCuenta {
             case Cliente c -> {
                 c.setNombreApellido(nombre);
                 c.setTelefono(telefono);
-                c.setDireccion(direccion);
                 c.setFecNacimiento(pedido.fecNacimiento());
+                // La dirección del cliente es su dirección principal (A10 a A14): se edita ahí y se copia.
+                if (!Objects.equals(direccion, c.getDireccion())) {
+                    direcciones.sincronizarDesdePerfil(c, direccion);
+                }
             }
             case Prestador p -> {
                 p.setNombreApellido(nombre);

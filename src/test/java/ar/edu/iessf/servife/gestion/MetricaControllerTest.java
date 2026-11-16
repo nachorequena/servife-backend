@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,6 +26,10 @@ import ar.edu.iessf.servife.config.CorsConfig;
 import ar.edu.iessf.servife.config.JwtConfig;
 import ar.edu.iessf.servife.config.SeguridadConfig;
 import ar.edu.iessf.servife.gestion.controller.MetricaController;
+import ar.edu.iessf.servife.gestion.dto.ConteoPorMes;
+import ar.edu.iessf.servife.gestion.dto.ConteoPorNombre;
+import ar.edu.iessf.servife.gestion.dto.ConteoPorServicio;
+import ar.edu.iessf.servife.gestion.dto.MetricasDetalleResponse;
 import ar.edu.iessf.servife.gestion.dto.MetricasResponse;
 import ar.edu.iessf.servife.gestion.service.ServicioDeMetricas;
 
@@ -73,5 +78,31 @@ class MetricaControllerTest {
             .andExpect(jsonPath("$.serviciosActivos").value(3))
             .andExpect(jsonPath("$.solicitudesPendientes").value(2))
             .andExpect(jsonPath("$.validacionesPendientes").value(5));
+    }
+
+    @Test
+    void detalleSoloParaGestorYPasaElPeriodo() throws Exception {
+        LocalDate desde = LocalDate.of(2026, 3, 1);
+        LocalDate hasta = LocalDate.of(2026, 4, 30);
+        when(servicio.obtenerDetalle(desde, hasta)).thenReturn(new MetricasDetalleResponse(desde, hasta, 3,
+            List.of(new ConteoPorServicio("Gas", 3, 1)), List.of(new ConteoPorNombre("PENDIENTE", 2)),
+            List.of(new ConteoPorMes("2026-03", 1), new ConteoPorMes("2026-04", 2)), List.of(new ConteoPorNombre("Pedro", 1))));
+
+        mvc.perform(get(RUTA + "/detalle").contextPath(CONTEXTO).with(como("PRESTADOR"))).andExpect(status().isForbidden());
+        mvc.perform(get(RUTA + "/detalle").contextPath(CONTEXTO).param("desde", "2026-03-01").param("hasta", "2026-04-30")
+                .with(como("GESTOR")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.desde").value("2026-03-01"))
+            .andExpect(jsonPath("$.totalSolicitudes").value(3))
+            .andExpect(jsonPath("$.porServicio[0].servicio").value("Gas"))
+            .andExpect(jsonPath("$.porServicio[0].realizados").value(1))
+            .andExpect(jsonPath("$.porMes[1].mes").value("2026-04"))
+            .andExpect(jsonPath("$.topPrestadores[0].nombre").value("Pedro"));
+    }
+
+    @Test
+    void detalleConFechaMalFormadaEs400() throws Exception {
+        mvc.perform(get(RUTA + "/detalle").contextPath(CONTEXTO).param("desde", "ayer").with(como("GESTOR")))
+            .andExpect(status().isBadRequest());
     }
 }
