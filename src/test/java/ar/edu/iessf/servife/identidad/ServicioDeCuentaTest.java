@@ -38,6 +38,7 @@ import ar.edu.iessf.servife.identidad.repository.GestorRepository;
 import ar.edu.iessf.servife.identidad.repository.PrestadorRepository;
 import ar.edu.iessf.servife.identidad.service.Cuentas;
 import ar.edu.iessf.servife.identidad.service.ServicioDeCuenta;
+import ar.edu.iessf.servife.identidad.service.ServicioDeDirecciones;
 import ar.edu.iessf.servife.identidad.service.ServicioDeTokens;
 
 /** A4 (sesión), A6 (datos de la cuenta) y A7 (cambio de contraseña) contra PostgreSQL real. */
@@ -59,6 +60,7 @@ class ServicioDeCuentaTest {
     @Autowired private TipoServicioRepository tiposServicio;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private UsuarioMapper mapper;
+    @Autowired private ServicioDeDirecciones direcciones;
 
     private ServicioDeTokens tokens;
     private ServicioDeCuenta servicio;
@@ -66,7 +68,7 @@ class ServicioDeCuentaTest {
     @BeforeEach
     void preparar() {
         tokens = mock(ServicioDeTokens.class);
-        servicio = new ServicioDeCuenta(cuentas, mapper, passwordEncoder, tokens);
+        servicio = new ServicioDeCuenta(cuentas, mapper, passwordEncoder, tokens, direcciones);
     }
 
     private Cliente guardarAna() {
